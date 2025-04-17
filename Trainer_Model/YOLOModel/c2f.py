@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-from YOLOModel import Conv, Bottleneck
+from . import Conv, Bottleneck
 
 class C2f(nn.Module):
     def __init__(self,in_channels, out_channels, num_bottlenecks, shortcut=True):

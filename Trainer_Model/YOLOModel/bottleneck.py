@@ -1,4 +1,4 @@
-from YOLOModel import Conv
+from . import Conv
 import torch.nn as nn
 
 class Bottleneck(nn.Module):

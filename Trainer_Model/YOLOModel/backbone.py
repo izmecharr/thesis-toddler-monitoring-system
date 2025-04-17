@@ -1,5 +1,5 @@
 import torch.nn as nn
-from YOLOModel import Conv, C2f, SPPF, Params
+from . import Conv, C2f, SPPF, Params
     
 class Backbone(nn.Module):
     def __init__(self,version,in_channels=3,shortcut=True):

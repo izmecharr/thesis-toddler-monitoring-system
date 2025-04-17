@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from YOLOModel import Conv, DFL, Params
+from . import Conv, DFL, Params
 class Head(nn.Module):
     def __init__(self, version, ch=16, num_classes=80):
         super().__init__()

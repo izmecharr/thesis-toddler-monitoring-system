@@ -1,7 +1,7 @@
 import torch
 import YOLOModel as ym
 import torch.optim as optim
-from Trainer_Model import YOLOTrainer, YOLOLoss, YOLODataset, collate_fn, box_iou_numpy, compute_ap
+from . import YOLOTrainer, YOLOLoss, YOLODataset, collate_fn, box_iou_numpy, compute_ap
 from torch.utils.data import DataLoader
 
 # Example usage

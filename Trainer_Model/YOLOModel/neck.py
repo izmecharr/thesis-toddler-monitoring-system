@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-from YOLOModel import Conv, C2f, Upsample, Params
+from . import Conv, C2f, Upsample, Params
 #NECK
 class Neck(nn.Module):
     def __init__(self,version):

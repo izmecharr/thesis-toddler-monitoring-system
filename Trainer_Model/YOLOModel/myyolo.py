@@ -1,5 +1,5 @@
 import torch.nn as nn
-from YOLOModel import Backbone, Neck, Head
+from . import Backbone, Neck, Head
 class MyYolo(nn.Module):
     def __init__(self,version):
         super().__init__()

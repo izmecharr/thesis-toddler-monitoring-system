@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-from YOLOModel import Conv
+from . import Conv
 
 class SPPF(nn.Module):
     def __init__(self, in_channels,out_channels, kernel_size=5):

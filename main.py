@@ -1,7 +1,7 @@
 import torch
-import YOLOModel as ym
+import Trainer_Model.YOLOModel as ym
 import torch.optim as optim
-from . import YOLOTrainer, YOLOLoss, YOLODataset, collate_fn, box_iou_numpy, compute_ap
+from Trainer_Model import YOLOTrainer, YOLOLoss, YOLODataset, collate_fn, box_iou_numpy, compute_ap
 from torch.utils.data import DataLoader
 
 # Example usage
@@ -15,7 +15,7 @@ def main():
     model = ym.MyYolo(version='n').to(device)
     
     # Define dataset paths (only need yaml path)
-    data_yaml_path = 'data/dataset/data.yaml'
+    data_yaml_path = 'C:\\Users\\izzze\\OneDrive\\Documents\\Thesis\\Thesis_Assets\\data\\dataset\\data.yaml'
     
     # Define datasets using yaml path
     train_dataset = YOLODataset(yaml_path=data_yaml_path, split='train')

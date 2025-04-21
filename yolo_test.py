@@ -3,14 +3,16 @@ from ultralytics import YOLO
 # Load a model
 model = YOLO('yolov8n.pt')  # load pretrained (n, s, m, l, x sizes available)
 
+
 # Train the model
 def main():
     results = model.train(
-        data='C:\\Users\\izzze\\OneDrive\\Documents\\Thesis\\Thesis_Assets\\data\\dataset\\data.yaml',
+        data='C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\baby\\YOLOv8_Data\\data.yaml',
         epochs=100,
         imgsz=640,
-        batch=16,
-        device='cuda:0',
+        batch=8,
+        device=0,
+        lr0=0.001,
         name='my_custom_model'
     )
 

@@ -66,7 +66,7 @@ class Head(nn.Module):
 
             sx = torch.arange(end=w, device= device, dtype=dtype) + offset
             sy = torch.arange(end=h, device=device,dtype=dtype) + offset
-            sy, sx = torch.meshgrid(sy, sx)
+            sy, sx = torch.meshgrid(sy, sx, indexing='ij')
 
             anchor_tensor.append(torch.stack((sx, sy), -1).view(-1,2))
 

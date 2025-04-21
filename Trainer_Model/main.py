@@ -9,6 +9,15 @@ def main():
     import re
     
     # Set device
+    if torch.cuda.is_available():
+        print(f"CUDA is available. Found {torch.cuda.device_count()} device(s)")
+        for i in range(torch.cuda.device_count()):
+            print(f"Device {i}: {torch.cuda.get_device_name()}")
+        device = torch.device('cuda:0')
+        print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device('cpu')
+        print("CUDA not available, using CPU instead")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # Create model
@@ -47,7 +56,7 @@ def main():
     criterion = YOLOLoss(num_classes=num_classes)
     
     # Create optimizer (AdamW as in your code)
-    optimizer = optim.AdamW(model.parameters(), lr=0.002, weight_decay=0.0001)
+    optimizer = optim.AdamW(model.parameters(), lr=0.002, weight_decay=0.01)
     
     # Create trainer
     trainer = YOLOTrainer(

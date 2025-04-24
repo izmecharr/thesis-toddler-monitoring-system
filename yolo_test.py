@@ -1,23 +1,27 @@
 from ultralytics import YOLO
+from multiprocessing import freeze_support
+import torch
 
 # Load a model
-model = YOLO('yolov8n.pt')  # load pretrained (n, s, m, l, x sizes available)
+model = YOLO('yolov8n.pt')  # load a pretrained model (recommended for training)
 
+if torch.cuda.is_available():
+    device = 'cuda:1'
+    print(torch.cuda.get_device_name(torch.cuda.current_device()))
+else: 'cpu'
 
 # Train the model
 def main():
     results = model.train(
-        data='C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\baby\\YOLOv8_Data\\data.yaml',
+        data='C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\baby\\data.yaml',
         epochs=100,
         imgsz=640,
-        batch=8,
-        device=0,
-        lr0=0.001,
-        name='my_custom_model'
+        batch=16,
+        device=device,
+        name='my_custom_model',
+        amp=False
     )
 
 if __name__ == '__main__':
-    from multiprocessing import freeze_support
-
     freeze_support()
     main()

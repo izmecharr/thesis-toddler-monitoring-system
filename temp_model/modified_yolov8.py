@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import os
 from pathlib import Path
+import yaml
 
 from ultralytics.nn.modules import (
     Conv, C2f, SPPF, Concat, Detect,
@@ -11,6 +12,7 @@ from ultralytics.models.yolo.model import DetectionModel
 # Updated imports to match current Ultralytics structure
 from ultralytics.cfg import get_cfg
 from ultralytics.utils.torch_utils import initialize_weights
+from ultralytics import YOLO
 
 class YOLOv8Enhanced(DetectionModel):
     """Modified YOLOv8 model with enhanced backbone for deeper feature extraction."""
@@ -18,7 +20,18 @@ class YOLOv8Enhanced(DetectionModel):
     def __init__(self, cfg='yolov8n.yaml', ch=3, nc=None, verbose=True):
         # Pass parameters to the parent class constructor
         super().__init__(cfg, ch, nc, verbose)
-        # We'll override the initialization in the parse_model method
+        
+        # Store the YAML configuration explicitly
+        # This ensures it's accessible even after saving/loading
+        if isinstance(cfg, str) and os.path.exists(cfg):
+            with open(cfg, 'r') as f:
+                self.yaml_dict = yaml.safe_load(f)
+            self.yaml = cfg  # Store the path to YAML file
+        elif isinstance(cfg, dict):
+            self.yaml_dict = cfg  # Store the YAML dictionary
+            self.yaml = 'yolov8n.yaml'  # Default path
+        else:
+            self.yaml = cfg  # Store whatever was passed
     
     def parse_model(self, d, ch):
         """
@@ -133,6 +146,30 @@ class YOLOv8Enhanced(DetectionModel):
             y.append(x if m.i in self.save else None)  # save output
         return x
 
+def save_model_with_yaml(model, save_path):
+    """Save model with YAML attribute preserved."""
+    # Create a dictionary to store all necessary components
+    model_dict = {
+        'model': model,
+        'yaml_path': model.yaml if hasattr(model, 'yaml') else 'yolov8n.yaml'
+    }
+    torch.save(model_dict, save_path)
+    return save_path
+
+def load_model_with_yaml(model_path):
+    """Load model and restore YAML attribute."""
+    checkpoint = torch.load(model_path)
+    if isinstance(checkpoint, dict) and 'model' in checkpoint:
+        model = checkpoint['model']
+        yaml_path = checkpoint.get('yaml_path', 'yolov8n.yaml')
+        setattr(model, 'yaml', yaml_path)
+        return model
+    else:
+        model = checkpoint
+        if not hasattr(model, 'yaml'):
+            setattr(model, 'yaml', 'yolov8n.yaml')  # Default YAML
+        return model
+
 # Function to create the modified model
 def create_modified_yolov8(size='n', pretrained=False):
     """
@@ -169,7 +206,11 @@ def create_modified_yolov8(size='n', pretrained=False):
         yaml_path = f'yolov8{size}.yaml'
         print(f"Using default YAML path: {yaml_path}")
     
+    # Create the enhanced model with explicit YAML path
     model = YOLOv8Enhanced(yaml_path)
+    
+    # Explicitly ensure the yaml attribute is set
+    setattr(model, 'yaml', yaml_path)
     
     if pretrained:
         try:
@@ -221,4 +262,5 @@ if __name__ == "__main__":
         print(f"Output shape: {outputs.shape}")
     else:
         for i, output in enumerate(outputs):
-            print(f"Output {i} shape: {output.shape}")
+            if isinstance(output, torch.Tensor):
+                print(f"Output {i} shape: {output.shape}")

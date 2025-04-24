@@ -13,13 +13,14 @@ else: 'cpu'
 # Train the model
 def main():
     results = model.train(
-        data='C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\baby\\data.yaml',
-        epochs=100,
+        data='C:\\Users\\izzze\\Downloads\\Thesis_2_Final_Dataset.v3i.yolov8\\data.yaml',
+        epochs=10,
         imgsz=640,
-        batch=16,
+        batch=18,
         device=device,
         name='my_custom_model',
-        amp=False
+        amp=False,
+        workers=4
     )
 
 if __name__ == '__main__':

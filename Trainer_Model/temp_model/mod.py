@@ -1,13 +1,12 @@
 import os
 import torch
 import yaml
-import multiprocessing
 from pathlib import Path
 from ultralytics import YOLO
-from temp_model.modified_yolov8 import create_modified_yolov8, save_model_with_yaml, load_model_with_yaml
+from modified_yolov8 import create_modified_yolov8, save_model_with_yaml, load_model_with_yaml
 
 def select_device(device_name=None):
-    # Auto-detect device if not specified
+    """Auto-detect device if not specified."""
     if not torch.cuda.is_available():
         print("CUDA not available. Using CPU")
         return 'cpu'
@@ -19,10 +18,7 @@ def select_device(device_name=None):
         print(f"CUDA device {i}: {current_device_name}")
         if current_device_name == device_name:
             print(f"Selected {device_name} (CUDA:{i})")
-            # Set environment variable to make only this GPU visible
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{i}"
-            
-            # Since we're making only this GPU visible, it becomes device 0
             print(f"Set CUDA_VISIBLE_DEVICES={i}, GPU is now accessible as device 0")
             return "0"
         
@@ -39,27 +35,15 @@ def train_enhanced_yolov8(
     imgsz=640,
     device=None,
     amp=False,
-    workers=4,
-    run_name=None
+    workers=8,
+    run_name=None,
+    learning_rate=0.0005,  # Reduced learning rate for deeper model
+    warmup_epochs=5,       # Warmup period for better convergence
+    weight_decay=0.0005    # Weight decay for regularization
 ):
     """
-    Train an enhanced YOLOv8 model with deeper feature extraction.
-    
-    Args:
-        data_yaml_path: Path to the data YAML file
-        size: Model size (n, s, m, l, x)
-        pretrained: Whether to load pretrained weights
-        epochs: Number of training epochs
-        batch_size: Batch size for training
-        imgsz: Input image size
-        device: Device to use for training (None for auto-detection)
-        amp: Whether to use Automatic Mixed Precision
-        workers: Number of worker threads for data loading
-        
-    Returns:
-        Path to the best trained models
+    Train an enhanced YOLOv8 model with deeper feature extraction and improved settings.
     """
-
     if device is None:
         device = select_device('NVIDIA GeForce GTX 1660 Ti with Max-Q Design')
     
@@ -72,12 +56,7 @@ def train_enhanced_yolov8(
     param_count = sum(p.numel() for p in enhanced_model.parameters())
     print(f"Enhanced model created with {param_count:,} parameters")
     
-    # Ensure the YAML attribute is set
-    yaml_path = getattr(enhanced_model, 'yaml', f'yolov8{size}.yaml')
-    setattr(enhanced_model, 'yaml', yaml_path)
-    print(f"Model YAML path: {enhanced_model.yaml}")
-    
-    # Save model with YAML attribute preserved
+    # Save model
     os.makedirs('models', exist_ok=True)
     model_path = f"models/enhanced_yolov8{size}_init.pt"
     save_model_with_yaml(enhanced_model, model_path)
@@ -86,12 +65,7 @@ def train_enhanced_yolov8(
     # Create YOLO model for training
     yolo_model = YOLO(model_path)
     
-    # Verify the model still has the enhanced architecture
-    yolo_param_count = sum(p.numel() for p in yolo_model.model.parameters())
-    print(f"YOLO model loaded with {yolo_param_count:,} parameters")
-    print(f"YAML path: {yolo_model.model.yaml if hasattr(yolo_model.model, 'yaml') else 'Not found'}")
-    
-        # Configure training settings
+    # Configure improved training settings
     training_args = {
         "data": data_yaml_path,
         "epochs": epochs,
@@ -107,7 +81,34 @@ def train_enhanced_yolov8(
         "verbose": True,
         "exist_ok": True,
         "project": "enhanced_yolov8",
-        "name": run_name if run_name else f"enhanced_{size}"  # Use provided run_name if available
+        "name": run_name if run_name else f"enhanced_{size}",
+        
+        # Improved hyperparameters
+        "lr0": learning_rate,          # Initial learning rate
+        "lrf": 0.01,                   # Final learning rate (lr0 * lrf)
+        "momentum": 0.937,             # SGD momentum
+        "weight_decay": weight_decay,  # Weight decay
+        "warmup_epochs": warmup_epochs,# Warmup epochs
+        "warmup_momentum": 0.8,        # Warmup initial momentum
+        "warmup_bias_lr": 0.1,         # Warmup initial bias lr
+        "box": 7.5,                    # Box loss gain
+        "cls": 0.5,                    # Class loss gain
+        "dfl": 1.5,                    # DFL loss gain
+        "mosaic": 1.0,                 # Image mosaic
+        "mixup": 0.1,                  # Image mixup
+        "copy_paste": 0.3,             # Copy-paste augmentation
+        "degrees": 10.0,               # Image rotation (+/- deg)
+        "translate": 0.1,              # Image translation (+/- fraction)
+        "scale": 0.5,                  # Image scale (+/- gain)
+        "shear": 2.0,                  # Image shear (+/- deg)
+        "perspective": 0.0001,         # Image perspective
+        "flipud": 0.5,                 # Image flip up-down
+        "fliplr": 0.5,                 # Image flip left-right
+        "hsv_h": 0.015,                # Image HSV-Hue augmentation
+        "hsv_s": 0.7,                  # Image HSV-Saturation augmentation
+        "hsv_v": 0.4,                  # Image HSV-Value augmentation
+        "label_smoothing": 0.1,        # Label smoothing epsilon
+        "dropout": 0.1                 # Dropout rate for regularization
     }
     
     # Start training
@@ -120,9 +121,8 @@ def train_enhanced_yolov8(
         # Get path to best model
         best_model_path = yolo_model.best if hasattr(yolo_model, 'best') else None
         
-        # If best_model_path is not found, look for it manually
         if not best_model_path or not os.path.exists(best_model_path):
-            output_dir = f"enhanced_yolov8/enhanced_{size}"
+            output_dir = f"enhanced_yolov8/{run_name if run_name else f'enhanced_{size}'}"
             best_model_path = os.path.join(output_dir, "weights", "best.pt")
             last_model_path = os.path.join(output_dir, "weights", "last.pt")
             
@@ -144,45 +144,35 @@ def train_enhanced_yolov8(
         return None
 
 def continue_training(
-    model_path,         # Path to your best.pt or last.pt from previous training
+    model_path,
     data_yaml_path,
     epochs=100,
     batch_size=16,
     imgsz=640,
     device=None,
     amp=False,
-    workers=4
+    workers=8,
+    run_name=None,
+    learning_rate=0.0001,  # Lower learning rate for fine-tuning
+    warmup_epochs=3
 ):
-    """Continue training from a previously trained model checkpoint while preserving the enhanced architecture."""
-    print(f"CUDA available: {torch.cuda.is_available()}")
-    print(f"CUDA device count: {torch.cuda.device_count()}")
-    for i in range(torch.cuda.device_count()):
-        print(f"CUDA device {i}: {torch.cuda.get_device_name(i)}")
-
-    # Auto-detect device
+    """Continue training from a previously trained checkpoint with optimized parameters."""
     if device is None:
         device = select_device('NVIDIA GeForce GTX 1660 Ti with Max-Q Design')
     
     print(f"Using device: {device}")
     
-    # Verify the model path exists
     if not os.path.exists(model_path):
         print(f"Error: Model path {model_path} does not exist.")
         return None
     
     # Create a fresh instance of the enhanced model
-    from temp_model.modified_yolov8 import create_modified_yolov8
     enhanced_model = create_modified_yolov8(size='n', pretrained=False)
     
-    # Count parameters to confirm it's the enhanced version
-    param_count = sum(p.numel() for p in enhanced_model.parameters())
-    print(f"Enhanced model created with {param_count:,} parameters")
-    
-    # Load weights from checkpoint and ensure YAML attribute
-    print(f"Loading weights from checkpoint: {model_path}")
+    # Load weights from checkpoint
     checkpoint = torch.load(model_path, map_location='cpu')
     
-    # Extract state_dict depending on checkpoint format
+    # Extract state_dict
     if isinstance(checkpoint, dict):
         if 'model' in checkpoint:
             if hasattr(checkpoint['model'], 'state_dict'):
@@ -196,7 +186,7 @@ def continue_training(
     else:
         state_dict = checkpoint.state_dict() if hasattr(checkpoint, 'state_dict') else checkpoint
     
-    # Load weights where shapes match
+    # Load matching weights
     enhanced_model_dict = enhanced_model.state_dict()
     matched_weights = {}
     for name, param in state_dict.items():
@@ -206,34 +196,15 @@ def continue_training(
     print(f"Loaded {len(matched_weights)}/{len(enhanced_model_dict)} weights from checkpoint")
     enhanced_model.load_state_dict(matched_weights, strict=False)
     
-    # Ensure YAML attribute is set
-    yaml_path = getattr(enhanced_model, 'yaml', 'yolov8n.yaml')
-    setattr(enhanced_model, 'yaml', yaml_path)
-    print(f"Model YAML path: {enhanced_model.yaml}")
-    
     # Save with YAML attribute preserved
     os.makedirs('models', exist_ok=True)
     temp_path = f"models/enhanced_continue.pt"
     save_model_with_yaml(enhanced_model, temp_path)
     
-    # Create YOLO model with our architecture
+    # Create YOLO model
     yolo_model = YOLO(temp_path)
     
-    # Verify the model still has the enhanced architecture
-    yolo_param_count = sum(p.numel() for p in yolo_model.model.parameters())
-    print(f"YOLO model loaded with {yolo_param_count:,} parameters")
-    print(f"YAML path: {yolo_model.model.yaml if hasattr(yolo_model.model, 'yaml') else 'Not found'}")
-    
-    # Check if we've preserved the enhanced architecture
-    expected_params = 3157200  # The specific number for your enhanced model
-    if abs(yolo_param_count - expected_params) > 1000:  # Allow small difference due to counting methods
-        print(f"WARNING: Parameter count doesn't match expected enhanced model ({expected_params:,})!")
-        print(f"Current count: {yolo_param_count:,}")
-        proceed = input("Continue anyway? (y/n): ").lower() == 'y'
-        if not proceed:
-            return None
-    
-    # Configure training settings
+    # Configure training settings for fine-tuning
     training_args = {
         "data": data_yaml_path,
         "epochs": epochs,
@@ -241,15 +212,29 @@ def continue_training(
         "batch": batch_size,
         "device": device,
         "workers": workers,
-        "patience": 50,
+        "patience": 30,
         "save": True,
-        "cache": True,
-        "amp": False,
+        "cache": "disk",
+        "amp": amp,
         "plots": True,
         "verbose": True,
         "exist_ok": True,
         "project": "enhanced_yolov8_continued",
-        "name": "continued_training"
+        "name": run_name if run_name else f"continued_training",
+        
+        # Fine-tuning hyperparameters
+        "lr0": learning_rate,
+        "lrf": 0.1,
+        "warmup_epochs": warmup_epochs,
+        "weight_decay": 0.0005,
+        "box": 5.0,                    # Lower box loss gain for fine-tuning
+        "cls": 0.5,
+        "dfl": 1.0,
+        "mosaic": 0.5,                 # Reduce augmentation for fine-tuning
+        "mixup": 0.05,
+        "copy_paste": 0.1,
+        "label_smoothing": 0.05,
+        "dropout": 0.05                # Lower dropout for fine-tuning
     }
     
     # Start training
@@ -260,21 +245,10 @@ def continue_training(
         # Get path to best model
         best_model_path = yolo_model.best if hasattr(yolo_model, 'best') else None
         
-        # If best_model_path is not found, look for it manually
         if not best_model_path or not os.path.exists(best_model_path):
-            output_dir = "enhanced_yolov8_continued/continued_training"
+            output_dir = f"enhanced_yolov8_continued/{run_name if run_name else 'continued_training'}"
             best_model_path = os.path.join(output_dir, "weights", "best.pt")
-            last_model_path = os.path.join(output_dir, "weights", "last.pt")
             
-            if os.path.exists(best_model_path):
-                print(f"Best model found at: {best_model_path}")
-            elif os.path.exists(last_model_path):
-                print(f"Best model not found. Using last model instead: {last_model_path}")
-                best_model_path = last_model_path
-            else:
-                print("No model files found after continued training.")
-                return None
-        
         print(f"Continued training completed successfully. Best model: {best_model_path}")
         return best_model_path
     except Exception as e:
@@ -284,10 +258,8 @@ def continue_training(
         return None
 
 def main():
-    # Replace with your actual data.yaml path
     data_yaml_path = "C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\baby\\data.yaml"
     
-    # Function to find the next available directory number
     def get_next_dir_number(base_dir):
         import os
         import re
@@ -296,64 +268,58 @@ def main():
             os.makedirs(base_dir)
             return 1
             
-        # Get all subdirectories in the base folder
         dirs = [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
         
-        # Extract numbers from directory names
         numbers = []
         for d in dirs:
             match = re.search(r'enhanced_\w+_(\d+)', d)
             if match:
                 numbers.append(int(match.group(1)))
         
-        # If no matching directories exist, start with 1
         if not numbers:
             return 1
             
-        # Return the next number in sequence
         return max(numbers) + 1
     
-    # Ask user if they want to start fresh or continue training
     train_option = input("Do you want to (1) start training from scratch or (2) continue from a checkpoint? (1/2): ")
     
     try:
         if train_option == "1":
-            # Get next train directory number
             next_number = get_next_dir_number("enhanced_yolov8")
             run_name = f"enhanced_n_{next_number}"
             
-            # Train a new enhanced model
             print(f"\n=== Starting new training (run: {run_name}) ===\n")
             best_model_path = train_enhanced_yolov8(
                 data_yaml_path=data_yaml_path,
                 size='n',
                 pretrained=True,
-                epochs=100,
-                batch_size=16,
+                epochs=20,          # More epochs for better convergence
+                batch_size=24,
                 imgsz=640,
-                device=None,  # Auto-detect
-                amp=False,    # Disable AMP to avoid NaN losses
-                workers=4,
-                run_name=run_name  # Pass the incremented run name
+                workers=1,
+                device=None,
+                amp=False,
+                run_name=run_name,
+                learning_rate=0.0005,  # Lower learning rate
+                warmup_epochs=5        # Warmup period
             )
         elif train_option == "2":
-            # Get next continue directory number
             next_number = get_next_dir_number("enhanced_yolov8_continued")
             run_name = f"enhanced_n_{next_number}"
             
-            # Continue training from a checkpoint
             checkpoint_path = input("Enter the path to the checkpoint (best.pt or last.pt): ")
             print(f"\n=== Continuing training from {checkpoint_path} (run: {run_name}) ===\n")
             best_model_path = continue_training(
                 model_path=checkpoint_path,
                 data_yaml_path=data_yaml_path,
-                epochs=100,
+                epochs=50,
                 batch_size=16,
                 imgsz=640,
-                device=None,  # Auto-detect
-                amp=False,    # Disable AMP to avoid NaN losses
-                workers=4,
-                run_name=run_name  # Pass the incremented run name
+                workers=8,
+                device=None,
+                amp=False,
+                run_name=run_name,
+                learning_rate=0.0001  # Even lower for fine-tuning
             )
         else:
             print("Invalid option. Please enter 1 or 2.")
@@ -362,7 +328,6 @@ def main():
         if best_model_path:
             print(f"\nTraining complete! Best model saved at: {best_model_path}")
             
-            # Run validation on the trained model
             print("\nRunning validation on the trained model...")
             model = YOLO(best_model_path)
             model.val(data=data_yaml_path)
@@ -375,6 +340,6 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    # Add freeze support for Windows multiprocessing
+    import multiprocessing
     multiprocessing.freeze_support()
     main()

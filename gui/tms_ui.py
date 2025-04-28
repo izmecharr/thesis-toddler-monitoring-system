@@ -7,6 +7,66 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtNetwork import QTcpServer, QTcpSocket, QHostAddress
+import socket
+import json
+import time
+import threading
+
+class NotificationManager:
+    def __init__(self):
+        self.connected_devices = []
+        self.server = None
+        self.last_notification_time = 0
+        self.notification_cooldown = 10  # seconds between notifications
+    
+    def start_server(self, port=5000):
+        """Start a simple TCP server for local network notifications"""
+        self.server = QTcpServer()
+        self.server.listen(QHostAddress.Any, port)
+        self.server.newConnection.connect(self.handle_new_connection)
+        
+        # Get local IP
+        local_ip = socket.gethostbyname(socket.gethostname())
+        return local_ip, port
+    
+    def handle_new_connection(self):
+        """Handle new device connections"""
+        client_socket = self.server.nextPendingConnection()
+        self.connected_devices.append(client_socket)
+        client_socket.disconnected.connect(lambda: self.handle_disconnection(client_socket))
+    
+    def handle_disconnection(self, client_socket):
+        """Handle device disconnections"""
+        if client_socket in self.connected_devices:
+            self.connected_devices.remove(client_socket)
+    
+    def send_notification(self, message, priority="high"):
+        """Send notification to all connected devices"""
+        current_time = time.time()
+        
+        # Check cooldown to prevent spam
+        if current_time - self.last_notification_time < self.notification_cooldown:
+            return
+        
+        self.last_notification_time = current_time
+        
+        # Local network notification
+        notification_data = {
+            "type": "hazard_alert",
+            "message": message,
+            "timestamp": current_time,
+            "priority": priority
+        }
+        
+        json_data = json.dumps(notification_data).encode()
+        
+        # Send to all connected devices
+        for device in self.connected_devices:
+            try:
+                device.write(json_data + b'\n')
+            except:
+                self.connected_devices.remove(device)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -84,6 +144,22 @@ class Ui_MainWindow(object):
         self.ConfigureButton.setMinimumWidth(90)
         self.header_layout.addWidget(self.ConfigureButton)
         
+        # Add notification status label
+        self.notificationStatusLabel = QtWidgets.QLabel(self.header_frame)
+        self.notificationStatusLabel.setObjectName("notificationStatusLabel")
+        self.notificationStatusLabel.setText("Notification: Not connected")
+        notifFont = QtGui.QFont()
+        notifFont.setPointSize(10)
+        self.notificationStatusLabel.setFont(notifFont)
+        self.header_layout.addWidget(self.notificationStatusLabel)
+        
+        # Add notification button
+        self.notificationButton = QtWidgets.QPushButton(self.header_frame)
+        self.notificationButton.setObjectName("notificationButton")
+        self.notificationButton.setText("Start Notifications")
+        self.notificationButton.setMinimumWidth(120)
+        self.header_layout.addWidget(self.notificationButton)
+        
         # Add header to main layout
         self.main_layout.addWidget(self.header_frame)
         
@@ -145,6 +221,9 @@ class Ui_MainWindow(object):
         self.timer.timeout.connect(self.update_frame)
         self.selected_camera_index = 0
         
+        # Initialize notification system
+        self.notification_manager = NotificationManager()
+        
         # Load YOLOv8 Model
         try:
             self.statusLabel.setText("Status: Loading YOLO model...")
@@ -164,6 +243,53 @@ class Ui_MainWindow(object):
         self.closeCamButton.clicked.connect(self.stop_camera)
         self.ConfigureButton.clicked.connect(self.open_config_dialog)
         self.comboBox.currentIndexChanged.connect(self.update_selected_camera)
+        self.notificationButton.clicked.connect(self.toggle_notifications)
+    
+    def toggle_notifications(self):
+        """Start or stop the notification server"""
+        if self.notification_manager.server is None:
+            ip, port = self.notification_manager.start_server()
+            self.notificationStatusLabel.setText(f"Notification: Running on {ip}:{port}")
+            self.notificationButton.setText("Stop Notifications")
+            
+            # Show connection info dialog
+            self.show_connection_info(ip, port)
+        else:
+            self.notification_manager.server.close()
+            self.notification_manager.server = None
+            self.notificationStatusLabel.setText("Notification: Not connected")
+            self.notificationButton.setText("Start Notifications")
+    
+    def show_connection_info(self, ip, port):
+        """Show connection information for mobile devices"""
+        dialog = QtWidgets.QDialog()
+        dialog.setWindowTitle("Mobile Connection")
+        dialog.resize(300, 200)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        
+        info_label = QtWidgets.QLabel(f"Connect your mobile device to:\n\nIP: {ip}\nPort: {port}")
+        info_label.setAlignment(QtCore.Qt.AlignCenter)
+        layout.addWidget(info_label)
+        
+        ok_button = QtWidgets.QPushButton("OK")
+        ok_button.clicked.connect(dialog.accept)
+        layout.addWidget(ok_button)
+        
+        dialog.exec_()
+    
+    def play_alarm_sound(self):
+        """Play an alarm sound locally"""
+        try:
+            import winsound
+            # Play Windows alert sound
+            winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
+        except:
+            # If winsound is not available, use QSound
+            try:
+                from PyQt5.QtMultimedia import QSound
+                QSound.play("alert.wav")  # Make sure you have an alert.wav file
+            except:
+                pass  # Fail silently if no sound system is available
     
     def get_available_cameras(self):
         """Get a list of available camera devices"""
@@ -302,6 +428,8 @@ class Ui_MainWindow(object):
                 
                 # Check for dangerous objects near toddlers
                 warning_triggered = False
+                warning_message = ""
+                
                 for tx1, ty1, tx2, ty2, t_width in toddlers:
                     toddler_center = ((tx1 + tx2) // 2, (ty1 + ty2) // 2)
                     
@@ -326,21 +454,32 @@ class Ui_MainWindow(object):
                                 
                                 # Check if object is too close to toddler
                                 if object_distance < self.distance_threshold:
-                                    warning_label = "WARNING: OBJECT TOO CLOSE"
+                                    warning_label = f"WARNING: {obj_name} TOO CLOSE"
                                     cv2.putText(frame_rgb, warning_label, 
                                               (toddler_center[0] - 100, toddler_center[1] - 30), 
                                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                                     warning_triggered = True
+                                    warning_message = f"DANGER: {obj_name} detected near toddler!"
                                     
                         # Draw a line between toddler and object
                         cv2.line(frame_rgb, toddler_center, obj_center, (255, 165, 0), 1)
                 
-                # Update status based on warnings
+                # Update status and send notification if needed
                 if warning_triggered:
                     self.statusLabel.setText("Status: WARNING - Object too close to toddler!")
                     self.statusLabel.setStyleSheet("color: red; font-weight: bold;")
+                    
+                    # Send notification
+                    self.notification_manager.send_notification(warning_message)
+                    
+                    # Play local alarm sound
+                    self.play_alarm_sound()
                 else:
                     self.statusLabel.setStyleSheet("color: black;")
+                    if toddlers:
+                        self.statusLabel.setText("Status: Monitoring toddler - No immediate threats")
+                    else:
+                        self.statusLabel.setText("Status: No toddler detected")
             
             # Convert frame to QPixmap and display it
             height, width, channel = frame_rgb.shape

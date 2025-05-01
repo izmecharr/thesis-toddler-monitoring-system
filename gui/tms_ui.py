@@ -72,7 +72,8 @@ class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         # Set default window size
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1060, 720)  # Default size set to 960x720
+        MainWindow.resize(1060, 720)  # Default size if user restores the window
+        MainWindow.showMaximized()  # Start maximized
         
         # Create the central widget
         self.centralwidget = QtWidgets.QWidget(MainWindow)
@@ -227,7 +228,8 @@ class Ui_MainWindow(object):
         # Load YOLOv8 Model
         try:
             self.statusLabel.setText("Status: Loading YOLO model...")
-            self.model = YOLO("yolov8n.pt")  # Load YOLOv8 model
+            self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\enhanced_yolov8\\enhanced_n_4\\weights\\best.pt')  # Load YOLOv8 model
+            #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\runs\\detect\\my_custom_model5\\weights\\best.pt')  # Load YOLOv8 model
             self.statusLabel.setText("Status: YOLO model loaded successfully")
         except Exception as e:
             self.statusLabel.setText(f"Status: Error loading model - {str(e)}")

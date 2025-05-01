@@ -37,7 +37,7 @@ def train_enhanced_yolov8(
     amp=False,
     workers=8,
     run_name=None,
-    learning_rate=0.0005,  # Reduced learning rate for deeper model
+    learning_rate=0.00005,  # Reduced learning rate for deeper model
     warmup_epochs=5,       # Warmup period for better convergence
     weight_decay=0.0005    # Weight decay for regularization
 ):
@@ -75,7 +75,7 @@ def train_enhanced_yolov8(
         "workers": workers,
         "patience": 50,
         "save": True,
-        "cache": True,
+        "cache": "disk",
         "amp": amp,
         "plots": True,
         "verbose": True,
@@ -99,7 +99,7 @@ def train_enhanced_yolov8(
         "copy_paste": 0.3,             # Copy-paste augmentation
         "degrees": 10.0,               # Image rotation (+/- deg)
         "translate": 0.1,              # Image translation (+/- fraction)
-        "scale": 0.5,                  # Image scale (+/- gain)
+        "scale": 0.9,                  # Image scale (+/- gain)
         "shear": 2.0,                  # Image shear (+/- deg)
         "perspective": 0.0001,         # Image perspective
         "flipud": 0.5,                 # Image flip up-down
@@ -234,7 +234,8 @@ def continue_training(
         "mixup": 0.05,
         "copy_paste": 0.1,
         "label_smoothing": 0.05,
-        "dropout": 0.05                # Lower dropout for fine-tuning
+        "dropout": 0.05,             # Lower dropout for fine-tuning
+        "scale": 0.8
     }
     
     # Start training
@@ -293,14 +294,14 @@ def main():
                 data_yaml_path=data_yaml_path,
                 size='n',
                 pretrained=True,
-                epochs=20,          # More epochs for better convergence
+                epochs=30,          # More epochs for better convergence
                 batch_size=24,
                 imgsz=640,
                 workers=1,
                 device=None,
                 amp=False,
                 run_name=run_name,
-                learning_rate=0.0005,  # Lower learning rate
+                learning_rate=0.00001,  # Lower learning rate
                 warmup_epochs=5        # Warmup period
             )
         elif train_option == "2":
@@ -312,10 +313,10 @@ def main():
             best_model_path = continue_training(
                 model_path=checkpoint_path,
                 data_yaml_path=data_yaml_path,
-                epochs=50,
-                batch_size=16,
+                epochs=25,
+                batch_size=24,
                 imgsz=640,
-                workers=8,
+                workers=1,
                 device=None,
                 amp=False,
                 run_name=run_name,

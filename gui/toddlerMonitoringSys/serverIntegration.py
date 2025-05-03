@@ -1,0 +1,780 @@
+# -*- coding: utf-8 -*-
+
+import socket
+import threading
+import json
+import qrcode
+from io import BytesIO
+import http.server
+import socketserver
+import os
+import shutil
+import tempfile
+from PyQt5.QtCore import Qt, QObject, pyqtSignal
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+                           QPushButton, QFrame, QMessageBox, QAction, QFileDialog,
+                           QCheckBox)
+import time
+import random
+
+
+class WebServerThread(threading.Thread):
+    """
+    A thread that runs a simple HTTP server to serve the mobile app APK
+    and provide a landing page with installation instructions.
+    """
+    
+    def __init__(self, host, port, app_path):
+        """
+        Initialize the web server thread.
+        
+        Args:
+            host (str): Host IP to bind to
+            port (int): Port to bind to
+            app_path (str): Path to the app APK file
+        """
+        super(WebServerThread, self).__init__()
+        self.daemon = True
+        self.host = host
+        self.port = port
+        self.app_path = app_path
+        self.server = None
+        self.is_running = False
+        self.temp_dir = None
+    
+    def run(self):
+        """Run the HTTP server thread"""
+        self.is_running = True
+        
+        # Create a temporary directory for our web content
+        self.temp_dir = tempfile.mkdtemp()
+        
+        # Copy the app APK to the temp directory
+        if os.path.exists(self.app_path):
+            shutil.copy2(self.app_path, os.path.join(self.temp_dir, "ToddlerAlarmApp.apk"))
+        
+        # Create a landing page HTML file
+        landing_page = self._create_landing_page()
+        with open(os.path.join(self.temp_dir, "index.html"), "w", encoding="utf-8") as f:
+            f.write(landing_page)
+        
+        # Create a custom HTTP request handler
+        current_dir = self.temp_dir  # Store in variable for use in inner class
+        
+        class AppServerHandler(http.server.SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=current_dir, **kwargs)
+            
+            def log_message(self, format, *args):
+                # Suppress log messages
+                return
+        
+        # Set up and start the HTTP server
+        try:
+            self.server = socketserver.TCPServer((self.host, self.port), AppServerHandler)
+            self.server.serve_forever()
+        except Exception as e:
+            print(f"Web server error: {str(e)}")
+        finally:
+            self.is_running = False
+            
+            # Clean up temporary directory
+            if self.temp_dir and os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def stop(self):
+        """Stop the HTTP server"""
+        if self.server:
+            self.server.shutdown()
+            self.server.server_close()
+            self.is_running = False
+        
+        # Clean up temporary directory
+        if self.temp_dir and os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def _create_landing_page(self):
+        """Create HTML landing page with installation instructions"""
+        html = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Toddler Alert App Installation</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    background-color: #f9f9f9;
+                    padding: 20px;
+                    max-width: 600px;
+                    margin: 0 auto;
+                }
+                h1 {
+                    color: #2979FF;
+                    text-align: center;
+                }
+                .container {
+                    background-color: white;
+                    border-radius: 10px;
+                    padding: 20px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                .button {
+                    display: block;
+                    background-color: #2979FF;
+                    color: white;
+                    text-align: center;
+                    padding: 15px;
+                    border-radius: 5px;
+                    text-decoration: none;
+                    font-weight: bold;
+                    margin: 20px 0;
+                }
+                .steps {
+                    background-color: #f5f5f5;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }
+                .steps ol {
+                    margin-bottom: 0;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Toddler Alert App</h1>
+                <p>Thank you for scanning the QR code. This application will help you receive alerts when your toddler is near a hazard or outside the safe area.</p>
+                
+                <a href="ToddlerAlarmApp.apk" class="button">Download App</a>
+                
+                <div class="steps">
+                    <h3>Installation Steps:</h3>
+                    <ol>
+                        <li>Click the "Download App" button above</li>
+                        <li>When prompted, allow your device to install apps from this source</li>
+                        <li>Open the app after installation</li>
+                        <li>Scan the QR code from the desktop application again to connect</li>
+                    </ol>
+                </div>
+                
+                <p><strong>Note:</strong> You may need to enable installation from unknown sources in your device settings.</p>
+                
+                <h3>Features:</h3>
+                <ul>
+                    <li>Real-time alerts for hazard proximity</li>
+                    <li>Geofence breach notifications</li>
+                    <li>Alert history tracking</li>
+                    <li>Persistent alarms until acknowledged</li>
+                </ul>
+            </div>
+        </body>
+        </html>
+        """
+        return html
+
+
+class MobileServerManager(QObject):
+    """Manages the server and connections to mobile alarm app clients"""
+    
+    # Define signals
+    connection_status_changed = pyqtSignal(bool, str)  # connected, client_info
+    client_count_changed = pyqtSignal(int)  # number of connected clients
+    
+    def __init__(self, parent=None):
+        super(MobileServerManager, self).__init__(parent)
+        self.server_socket = None
+        self.server_thread = None
+        self.web_server_thread = None
+        self.clients = []
+        self.client_threads = []
+        self.is_running = False
+        self.server_ip = self._get_local_ip()
+        self.server_port = 8765  # Default port
+        self.web_server_port = 8080  # Default web server port
+        self.app_id = f"toddler_monitor_{random.randint(10000, 99999)}"  # Generate random app ID
+        self.app_path = ""  # Path to the mobile app APK
+    
+    def _get_local_ip(self):
+        """Get the local IP address of this machine"""
+        try:
+            # Create a socket to determine the local IP address
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            # Doesn't need to be reachable
+            s.connect(('8.8.8.8', 1))
+            local_ip = s.getsockname()[0]
+            s.close()
+            return local_ip
+        except:
+            return '127.0.0.1'  # Fallback to localhost
+    
+    def set_app_path(self, path):
+        """Set the path to the mobile app APK file"""
+        self.app_path = path
+    
+    def start_server(self):
+        """Start the server in a background thread"""
+        if self.is_running:
+            return
+        
+        try:
+            # Create server socket
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            
+            # Bind to a free port
+            self.server_socket.bind((self.server_ip, self.server_port))
+            self.server_socket.listen(5)
+            
+            # Get the actual port that was assigned
+            _, self.server_port = self.server_socket.getsockname()
+            
+            # Start server thread
+            self.is_running = True
+            self.server_thread = threading.Thread(target=self._accept_connections)
+            self.server_thread.daemon = True
+            self.server_thread.start()
+            
+            # Start web server for app download if app path is provided
+            if os.path.exists(self.app_path):
+                self.web_server_thread = WebServerThread(self.server_ip, self.web_server_port, self.app_path)
+                self.web_server_thread.start()
+            
+            print(f"Server started on {self.server_ip}:{self.server_port}")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to start server: {str(e)}")
+            if self.server_socket:
+                self.server_socket.close()
+                self.server_socket = None
+            return False
+    
+    def stop_server(self):
+        """Stop the server and disconnect all clients"""
+        self.is_running = False
+        
+        # Close all client connections
+        for client in self.clients:
+            try:
+                client.close()
+            except:
+                pass
+        self.clients = []
+        
+        # Close server socket
+        if self.server_socket:
+            try:
+                self.server_socket.close()
+            except:
+                pass
+            self.server_socket = None
+        
+        # Stop web server if running
+        if self.web_server_thread and self.web_server_thread.is_running:
+            self.web_server_thread.stop()
+        
+        # Update status
+        self.connection_status_changed.emit(False, "Server stopped")
+        self.client_count_changed.emit(0)
+        
+        print("Server stopped")
+    
+    def _accept_connections(self):
+        """Thread function to accept incoming connections"""
+        while self.is_running:
+            try:
+                # Accept a new connection
+                client_socket, client_address = self.server_socket.accept()
+                
+                # Add to clients list
+                self.clients.append(client_socket)
+                
+                # Start a thread to handle this client
+                client_thread = threading.Thread(
+                    target=self._handle_client,
+                    args=(client_socket, client_address)
+                )
+                client_thread.daemon = True
+                client_thread.start()
+                self.client_threads.append(client_thread)
+                
+                # Update client count
+                self.client_count_changed.emit(len(self.clients))
+                
+                # Emit connection status change
+                client_info = f"{client_address[0]}:{client_address[1]}"
+                self.connection_status_changed.emit(True, client_info)
+                
+                print(f"New connection from {client_address}")
+                
+            except:
+                if not self.is_running:
+                    break
+                time.sleep(0.1)
+    
+    def _handle_client(self, client_socket, client_address):
+        """Thread function to handle communication with a client"""
+        try:
+            # Send welcome message
+            welcome_msg = {
+                "type": "welcome",
+                "message": "Connected to Toddler Monitoring System",
+                "app_id": self.app_id
+            }
+            client_socket.send(json.dumps(welcome_msg).encode('utf-8'))
+            
+            # Receive loop
+            while self.is_running and client_socket in self.clients:
+                try:
+                    # Try to receive data (with timeout)
+                    client_socket.settimeout(1.0)
+                    data = client_socket.recv(4096)
+                    
+                    if not data:
+                        # Client disconnected
+                        break
+                    
+                    # Process received data
+                    try:
+                        message = json.loads(data.decode('utf-8'))
+                        print(f"Received from client: {message}")
+                        
+                        # Handle different message types
+                        if message.get("type") == "ping":
+                            # Respond to ping
+                            response = {"type": "pong", "timestamp": time.time()}
+                            client_socket.send(json.dumps(response).encode('utf-8'))
+                        
+                    except json.JSONDecodeError:
+                        print("Received invalid JSON data")
+                
+                except socket.timeout:
+                    # This is normal, just continue
+                    continue
+                except:
+                    # Other error, client probably disconnected
+                    break
+        
+        except Exception as e:
+            print(f"Error handling client: {str(e)}")
+        
+        finally:
+            # Client disconnected or error occurred
+            try:
+                client_socket.close()
+            except:
+                pass
+            
+            # Remove from clients list
+            if client_socket in self.clients:
+                self.clients.remove(client_socket)
+                
+                # Update client count
+                self.client_count_changed.emit(len(self.clients))
+                
+                # Emit connection status change
+                client_info = f"{client_address[0]}:{client_address[1]}"
+                if len(self.clients) == 0:
+                    self.connection_status_changed.emit(False, f"Client {client_info} disconnected")
+                
+                print(f"Client {client_address} disconnected")
+    
+    def send_alert(self, alert_type, message):
+        """Send an alert to all connected clients"""
+        if not self.clients:
+            print("No clients connected to send alert")
+            return False
+        
+        alert = {
+            "type": "alert",
+            "alert_type": alert_type,
+            "message": message,
+            "timestamp": time.time()
+        }
+        
+        alert_json = json.dumps(alert).encode('utf-8')
+        
+        # Send to all clients
+        for client in self.clients[:]:  # Copy the list to avoid modification issues
+            try:
+                client.send(alert_json)
+            except:
+                # Error sending, client probably disconnected
+                try:
+                    client.close()
+                except:
+                    pass
+                if client in self.clients:
+                    self.clients.remove(client)
+        
+        # Update client count in case any clients were removed
+        self.client_count_changed.emit(len(self.clients))
+        
+        return True
+    
+    def generate_qr_code(self):
+        """Generate a QR code with connection information and app download URL"""
+        # Create connection info with both server info and web server for app download
+        connection_info = {
+            "host": self.server_ip,
+            "port": self.server_port,
+            "app_id": self.app_id
+        }
+        
+        # Add web server URL if enabled
+        if self.web_server_thread and self.web_server_thread.is_running:
+            connection_info["app_download_url"] = f"http://{self.server_ip}:{self.web_server_port}/"
+        
+        # Convert to JSON string
+        json_data = json.dumps(connection_info)
+        
+        # Generate QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(json_data)
+        qr.make(fit=True)
+        
+        # Create QImage from QR code
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convert PIL Image to QPixmap
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        
+        qimage = QImage.fromData(buffer.getvalue())
+        pixmap = QPixmap.fromImage(qimage)
+        
+        return pixmap
+
+
+class MobileConnectionDialog(QDialog):
+    """Dialog to show QR code and manage mobile app connections"""
+    
+    def __init__(self, parent=None):
+        super(MobileConnectionDialog, self).__init__(parent)
+        
+        # Set window properties
+        self.setWindowTitle("Mobile App Connection")
+        self.resize(500, 650)
+        
+        # Initialize app path
+        self.app_path = ""
+        
+        # Create the server manager
+        self.server_manager = MobileServerManager(self)
+        
+        # Connect signals
+        self.server_manager.connection_status_changed.connect(self.update_connection_status)
+        self.server_manager.client_count_changed.connect(self.update_client_count)
+        
+        # Set up layout
+        self.init_ui()
+        
+        # Look for an APK file in the current directory
+        self.find_app_apk()
+        
+        # Start the server
+        self.start_server()
+    
+    def find_app_apk(self):
+        """Look for an APK file in the current directory"""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Check for APK in common locations
+        potential_paths = [
+            os.path.join(current_dir, "ToddlerAlarmApp.apk"),
+            os.path.join(current_dir, "app", "ToddlerAlarmApp.apk"),
+            os.path.join(current_dir, "mobile", "ToddlerAlarmApp.apk"),
+            os.path.join(current_dir, "apk", "ToddlerAlarmApp.apk")
+        ]
+        
+        for path in potential_paths:
+            if os.path.exists(path):
+                self.app_path = path
+                self.server_manager.set_app_path(path)
+                self.app_path_label.setText(f"App package: {os.path.basename(path)}")
+                self.enable_app_download_checkbox.setChecked(True)
+                return
+        
+        # No APK found
+        self.app_path_label.setText("No app package found")
+        self.enable_app_download_checkbox.setChecked(False)
+    
+    def init_ui(self):
+        """Initialize the UI components"""
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
+        
+        # Title
+        title_label = QLabel("Connect Mobile Alert App")
+        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
+        title_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title_label)
+        
+        # App download setup
+        app_frame = QFrame()
+        app_frame.setStyleSheet("background-color: #252536; border-radius: 6px;")
+        app_layout = QVBoxLayout(app_frame)
+        
+        # Enable app download checkbox
+        self.enable_app_download_checkbox = QCheckBox("Enable automatic app download")
+        self.enable_app_download_checkbox.setStyleSheet("color: white;")
+        app_layout.addWidget(self.enable_app_download_checkbox)
+        
+        # App path
+        self.app_path_label = QLabel("No app package selected")
+        self.app_path_label.setStyleSheet("color: #B0B0C0;")
+        app_layout.addWidget(self.app_path_label)
+        
+        # Browse button
+        browse_button = QPushButton("Browse for APK")
+        browse_button.setStyleSheet("""
+            QPushButton {
+                background-color: #5C6BC0;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+            }
+            QPushButton:hover {
+                background-color: #6C79CC;
+            }
+        """)
+        browse_button.clicked.connect(self.browse_for_apk)
+        app_layout.addWidget(browse_button)
+        
+        main_layout.addWidget(app_frame)
+        
+        # Instructions
+        instructions = QLabel(
+            "Scan this QR code with the Toddler Alert mobile app to receive alerts "
+            "when your toddler is near hazards or outside the safe area. If the app "
+            "is not installed, scanning the QR code will take you to a download page."
+        )
+        instructions.setWordWrap(True)
+        instructions.setStyleSheet("color: white;")
+        instructions.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(instructions)
+        
+        # QR code frame
+        self.qr_frame = QFrame()
+        self.qr_frame.setStyleSheet("background-color: white; border-radius: 10px;")
+        self.qr_frame.setMinimumSize(300, 300)
+        self.qr_frame.setMaximumSize(300, 300)
+        
+        qr_layout = QVBoxLayout(self.qr_frame)
+        qr_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # QR code label
+        self.qr_label = QLabel()
+        self.qr_label.setAlignment(Qt.AlignCenter)
+        qr_layout.addWidget(self.qr_label)
+        
+        # Add QR frame to main layout centered
+        qr_container = QHBoxLayout()
+        qr_container.addStretch(1)
+        qr_container.addWidget(self.qr_frame)
+        qr_container.addStretch(1)
+        main_layout.addLayout(qr_container)
+        
+        # Connection status
+        status_frame = QFrame()
+        status_frame.setStyleSheet("background-color: #252536; border-radius: 6px;")
+        status_layout = QVBoxLayout(status_frame)
+        
+        # Status label
+        self.status_label = QLabel("Server Status: Starting...")
+        self.status_label.setStyleSheet("color: white;")
+        status_layout.addWidget(self.status_label)
+        
+        # Connected clients label
+        self.clients_label = QLabel("Connected Devices: 0")
+        self.clients_label.setStyleSheet("color: white;")
+        status_layout.addWidget(self.clients_label)
+        
+        # Server details
+        self.server_details = QLabel("Server details will appear here")
+        self.server_details.setStyleSheet("color: #B0B0C0;")
+        status_layout.addWidget(self.server_details)
+        
+        main_layout.addWidget(status_frame)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        # Test alert button
+        self.test_button = QPushButton("Send Test Alert")
+        self.test_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2979FF;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 12px 24px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #3D8BFF;
+            }
+            QPushButton:pressed {
+                background-color: #1565C0;
+            }
+        """)
+        self.test_button.clicked.connect(self.send_test_alert)
+        button_layout.addWidget(self.test_button)
+        
+        # Close button
+        self.close_button = QPushButton("Close")
+        self.close_button.setStyleSheet("""
+            QPushButton {
+                background-color: #5C6BC0;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 12px 24px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #6C79CC;
+            }
+            QPushButton:pressed {
+                background-color: #4C5AB0;
+            }
+        """)
+        self.close_button.clicked.connect(self.close_dialog)
+        button_layout.addWidget(self.close_button)
+        
+        main_layout.addLayout(button_layout)
+    
+    def browse_for_apk(self):
+        """Browse for an APK file"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select APK File", "", "Android Package (*.apk)"
+        )
+        
+        if file_path:
+            self.app_path = file_path
+            self.server_manager.set_app_path(file_path)
+            self.app_path_label.setText(f"App package: {os.path.basename(file_path)}")
+            self.enable_app_download_checkbox.setChecked(True)
+            
+            # Restart server to enable app download
+            self.server_manager.stop_server()
+            self.start_server()
+    
+    def start_server(self):
+        """Start the server and update the QR code"""
+        if self.server_manager.start_server():
+            # Update status
+            self.status_label.setText("Server Status: Running")
+            
+            # Update server details
+            web_server_info = ""
+            if self.enable_app_download_checkbox.isChecked() and os.path.exists(self.app_path):
+                web_server_info = f"\nApp Download URL: http://{self.server_manager.server_ip}:{self.server_manager.web_server_port}/"
+                
+            self.server_details.setText(
+                f"Server IP: {self.server_manager.server_ip}\n"
+                f"Port: {self.server_manager.server_port}\n"
+                f"App ID: {self.server_manager.app_id}"
+                f"{web_server_info}"
+            )
+            
+            # Generate and display QR code
+            qr_pixmap = self.server_manager.generate_qr_code()
+            self.qr_label.setPixmap(qr_pixmap.scaled(
+                280, 280, 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            ))
+        else:
+            # Failed to start server
+            self.status_label.setText("Server Status: Failed to start")
+            QMessageBox.critical(
+                self,
+                "Server Error",
+                "Failed to start the mobile alert server. Please check your network settings."
+            )
+    
+    def update_connection_status(self, connected, client_info):
+        """Update the connection status display"""
+        if connected:
+            self.status_label.setText(f"Server Status: Client connected")
+        else:
+            self.status_label.setText(f"Server Status: {client_info}")
+    
+    def update_client_count(self, count):
+        """Update the connected clients count"""
+        self.clients_label.setText(f"Connected Devices: {count}")
+    
+    def send_test_alert(self):
+        """Send a test alert to all connected clients"""
+        if self.server_manager.send_alert("Test Alert", "This is a test alert from the Toddler Monitoring System."):
+            QMessageBox.information(
+                self,
+                "Test Alert",
+                "Test alert sent successfully to all connected devices."
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Test Alert",
+                "No mobile devices connected. Please scan the QR code with the mobile app first."
+            )
+    
+    def close_dialog(self):
+        """Close the dialog and stop the server"""
+        self.accept()
+    
+    def closeEvent(self, event):
+        """Handle dialog close event"""
+        # Stop the server
+        self.server_manager.stop_server()
+        event.accept()
+
+
+def integrate_mobile_alerts(main_window):
+    """Integrate mobile alerts with the main application"""
+    # Create server manager
+    server_manager = MobileServerManager(main_window)
+    
+    # Store reference in main window
+    main_window.mobile_server_manager = server_manager
+    
+    # Add a method to show the connection dialog
+    def show_mobile_connection_dialog():
+        dialog = MobileConnectionDialog(main_window)
+        dialog.exec_()
+    
+    # Add a method to send alerts
+    def send_mobile_alert(alert_type, message):
+        if hasattr(main_window, 'mobile_server_manager'):
+            main_window.mobile_server_manager.send_alert(alert_type, message)
+    
+    # Add methods to main window
+    main_window.show_mobile_connection_dialog = show_mobile_connection_dialog
+    main_window.send_mobile_alert = send_mobile_alert
+    
+    # Create a menu item to open the connection dialog
+    if hasattr(main_window, 'ui') and hasattr(main_window.ui, 'menubar'):
+        # Create Mobile Connection menu
+        mobile_menu = main_window.ui.menubar.addMenu("Mobile")
+        
+        # Add Connect Mobile App action
+        connect_action = QAction("Connect Mobile App", main_window)
+        connect_action.triggered.connect(show_mobile_connection_dialog)
+        mobile_menu.addAction(connect_action)
+    
+    # Return the server manager
+    return server_manager

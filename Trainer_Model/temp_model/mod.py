@@ -108,7 +108,7 @@ def train_enhanced_yolov8(
         "hsv_s": 0.7,                  # Image HSV-Saturation augmentation
         "hsv_v": 0.4,                  # Image HSV-Value augmentation
         "label_smoothing": 0.1,        # Label smoothing epsilon
-        "dropout": 0.1                 # Dropout rate for regularization
+        "dropout": 0.05                # Dropout rate for regularization
     }
     
     # Start training
@@ -294,14 +294,14 @@ def main():
                 data_yaml_path=data_yaml_path,
                 size='n',
                 pretrained=True,
-                epochs=30,          # More epochs for better convergence
+                epochs=25,          # More epochs for better convergence
                 batch_size=24,
                 imgsz=640,
                 workers=1,
                 device=None,
                 amp=False,
                 run_name=run_name,
-                learning_rate=0.00001,  # Lower learning rate
+                learning_rate=0.000001,  # Lower learning rate
                 warmup_epochs=5        # Warmup period
             )
         elif train_option == "2":

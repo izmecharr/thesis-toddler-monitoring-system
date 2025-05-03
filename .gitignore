@@ -1,2 +1,7 @@
 Thesis_Assets/
+models/
+runs/
+modifications/
+enhanced_yolov8/
+enhanced_yolov8_continued/
 *.py[cod]

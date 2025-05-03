@@ -1,448 +1,363 @@
+import os
 import torch
 import torch.nn as nn
-import os
-from pathlib import Path
 import yaml
-import sys
-
-from ultralytics.nn.modules import (
-    Conv, C2f, SPPF, Concat, Detect,
-    DFL, Proto, RepC3, C3
-)
-from ultralytics.models.yolo.model import DetectionModel
-from ultralytics.cfg import get_cfg
-from ultralytics.utils.torch_utils import initialize_weights
+from copy import deepcopy
 from ultralytics import YOLO
+from ultralytics.nn.modules import C2f, Conv
+
+class GroupNormConv(nn.Module):
+    """Conv module with GroupNorm instead of BatchNorm for small feature maps."""
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):
+        super().__init__()
+        if p is None:
+            p = k // 2
+        self.conv = nn.Conv2d(c1, c2, k, s, p, groups=g, bias=False)
+        # Use GroupNorm instead of BatchNorm
+        # Ensure at least 2 groups but not more than channels/2
+        num_groups = min(max(2, c2 // 4), 32)
+        self.norm = nn.GroupNorm(num_groups, c2)
+        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
+
+    def forward(self, x):
+        return self.act(self.norm(self.conv(x)))
 
 class SmallObjectEnhance(nn.Module):
+    """Channel attention module optimized for small object detection with GroupNorm."""
     def __init__(self, c1, c2, act=True):
         super().__init__()
-        self.cv1 = Conv(c1, c2//2, 1, 1, act=act)
-        self.cv2 = Conv(c2//2, c2, 3, 1, act=act)
+        # Use GroupNorm convolutions instead of standard Conv with BatchNorm
+        self.cv1 = GroupNormConv(c1, c2//2, 1, 1, act=act)
+        self.cv2 = GroupNormConv(c2//2, c2, 3, 1, act=act)
+        
+        # Attention mechanism
         self.attn = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
-            Conv(c2, c2//16, 1, act=act),
-            Conv(c2//16, c2, 1, act=act),
+            GroupNormConv(c2, c2//16, 1, act=act),
+            GroupNormConv(c2//16, c2, 1, act=act),
             nn.Sigmoid()
         )
-        # Add attributes needed by YOLOv8
-        self.i = 0  # Layer index, will be set by model builder
-        self.f = -1  # Input source, will be set by model builder
         
     def forward(self, x):
         x = self.cv2(self.cv1(x))
         return x * self.attn(x)
 
-class ResidualC2f(nn.Module):
-    """C2f block with residual connection for better gradient flow."""
+class GroupNormC2f(nn.Module):
+    """C2f module with GroupNorm for better handling of small feature maps."""
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
         super().__init__()
-        self.c2f = C2f(c1, c2, n, shortcut, g, e)  # Removed the 'act' parameter
-        self.residual = nn.Identity() if c1 == c2 else Conv(c1, c2, 1, 1)
-        # Add attributes needed by YOLOv8
-        self.i = 0  # Layer index, will be set by model builder
-        self.f = -1  # Input source, will be set by model builder
+        self.c = int(c2 * e)  # Hidden channels
+        self.cv1 = GroupNormConv(c1, 2 * self.c, 1, 1)
+        self.cv2 = GroupNormConv((2 + n) * self.c, c2, 1)  # Optional GroupNormConv for output
+        
+        # Create a list of blocks with GroupNorm
+        self.m = nn.ModuleList()
+        for _ in range(n):
+            # Create a bottleneck block with GroupNorm
+            block = nn.Sequential(
+                GroupNormConv(self.c, self.c, 3),
+                GroupNormConv(self.c, self.c, 3)
+            )
+            self.m.append(block)
+
+    def forward(self, x):
+        # Initial convolution
+        y = list(self.cv1(x).chunk(2, 1))
+        
+        # Process through blocks
+        for module in self.m:
+            y.append(module(y[-1]))
+            
+        # Concatenate and final convolution
+        return self.cv2(torch.cat(y, 1))
+
+class ResidualC2f(nn.Module):
+    """C2f block with residual connection and GroupNorm for better gradient flow."""
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
+        super().__init__()
+        self.c2f = GroupNormC2f(c1, c2, n, shortcut, g, e)
+        self.residual = nn.Identity() if c1 == c2 else GroupNormConv(c1, c2, 1, 1)
         
     def forward(self, x):
         return self.c2f(x) + self.residual(x)
 
-# Register custom modules in the ultralytics.nn.modules namespace
-import ultralytics.nn.modules
-ultralytics.nn.modules.ResidualC2f = ResidualC2f
-ultralytics.nn.modules.SmallObjectEnhance = SmallObjectEnhance
+class EnhancedYOLOv8(nn.Module):
+    """Enhanced YOLOv8 model using hooks to add custom layers."""
+    def __init__(self, size='n', pretrained=True):
+        super().__init__()
+        
+        # Initialize variables to store activations
+        self.activations = {}
+        self.hooks = []
+        
+        # Load the base model
+        print(f"Loading YOLOv8{size} as base model...")
+        self.base_model = YOLO(f"yolov8{size}.pt" if pretrained else f"yolov8{size}.yaml").model
+        
+        # Store original model attributes
+        self.yaml = getattr(self.base_model, 'yaml', None)
+        self.names = getattr(self.base_model, 'names', None)
+        self.stride = getattr(self.base_model, 'stride', None)
+        
+        # Analyze model structure to determine where to place custom modules
+        self._analyze_model_structure()
+        
+        # Create custom layers based on analysis
+        self._create_custom_layers()
+        
+        # Register hooks to capture activations at specific points
+        self._register_hooks()
+        
+        # Print model info
+        num_params = sum(p.numel() for p in self.parameters())
+        print(f"Enhanced YOLOv8{size} model created with {num_params:,} parameters")
 
-# Make them available at the top level for the model builder
-setattr(sys.modules['ultralytics.nn.modules'], 'ResidualC2f', ResidualC2f)
-setattr(sys.modules['ultralytics.nn.modules'], 'SmallObjectEnhance', SmallObjectEnhance)
-
-class YOLOv8Enhanced(DetectionModel):
-    """Modified YOLOv8 model with enhanced backbone for deeper feature extraction."""
-    
-    def __init__(self, cfg='yolov8n.yaml', ch=3, nc=None, verbose=True):
-        super().__init__(cfg, ch, nc, verbose)
+    def _analyze_model_structure(self):
+        """Analyze the YOLOv8 model structure to determine channel sizes."""
+        self.channel_sizes = {}
         
-        if isinstance(cfg, str) and os.path.exists(cfg):
-            with open(cfg, 'r') as f:
-                self.yaml_dict = yaml.safe_load(f)
-            self.yaml = cfg
-        elif isinstance(cfg, dict):
-            self.yaml_dict = cfg
-            self.yaml = 'yolov8n.yaml'
-        else:
-            self.yaml = cfg
-    
-    def parse_model(self, ch):
-        nc, act = (
-            self.yaml['nc'],
-            self.yaml['activation']
-        )
+        # We'll use a dummy forward pass to analyze the structure
+        print("Analyzing base model structure...")
         
-        layers, save, c2 = [], [], ch[-1]
+        def get_activation(name):
+            def hook(module, input, output):
+                self.activations[name] = output
+            return hook
         
-        # Initial conv
-        layers.append([Conv, [c2, 64, 3, 2, 1, act], 0])  # 0-P1/2
-        c2 = 64
+        # Register temporary hooks to capture layer outputs
+        temp_hooks = []
         
-        # First block - P2/4
-        layers.append([Conv, [c2, 128, 3, 2, 1, act], 1])  # 1-P2/4
-        c2 = 128
-        layers.append([C2f, [c2, c2, 3, 1, act], 2])  # 2
-        # Add ONE extra ResidualC2f block for better features
-        layers.append([ResidualC2f, [c2, c2, 2, 1 ], 3])  # 3
+        # YOLOv8 model[0] is the backbone
+        # model[1] through model[-1] are the detection head components
+        for i, module in enumerate(self.base_model.model):
+            temp_hooks.append(module.register_forward_hook(get_activation(f"module_{i}")))
         
-        # Second block - P3/8
-        layers.append([Conv, [c2, 256, 3, 2, 1, act], 4])  # 4-P3/8
-        c2 = 256
-        layers.append([C2f, [c2, c2, 6, 1, act], 5])  # 5
-        save.append(5)  # Save P3/8 scale features
-
-        layers.append([ResidualC2f, [c2, c2, 3, 1], 6])  # Changed from 5.5 to integer index
-        save.append(6)  # Save ResidualC2f enhanced features
-
-        layers.append([SmallObjectEnhance, [c2, c2, act], 7])  # Changed from 5.6 to integer index
-        save.append(7)  # Save small object enhanced features
-        
-        # Third block - P4/16
-        layers.append([Conv, [c2, 512, 3, 2, 1, act], 8])  # Changed from 6 to 8
-        c2 = 512
-        layers.append([C2f, [c2, c2, 6, 1, act], 9])  # Changed from 7 to 9
-        # Add ONE extra ResidualC2f block
-        layers.append([ResidualC2f, [c2, c2, 3, 1], 10])  # Changed from 8 to 10
-        save.append(10)  # Save P4/16 scale features - Changed from 8 to 10
-        
-        # Fourth block - P5/32
-        layers.append([Conv, [c2, 1024, 3, 2, 1, act], 11])  # Changed from 9 to 11
-        c2 = 1024
-        layers.append([C2f, [c2, c2, 3, 1, act], 12])  # Changed from 10 to 12
-        
-        # SPPF block
-        layers.append([SPPF, [c2, c2, 5, act], 13])  # Changed from 11 to 13
-        save.append(13)  # Save P5/32 scale features - Changed from 11 to 13
-        
-        # Neck - Upsampling path
-        layers.append([nn.Upsample, [None, 2, 'nearest'], 14])  # Changed from 12 to 14
-        layers.append([Concat, [[14, 10]], 15])  # Changed from [12, 8] to [14, 10]
-        c2 = 1024 + 512
-        layers.append([C2f, [c2, 512, 3, 1, act, False], 16])  # Changed from 14 to 16
-        c2 = 512
-        
-        layers.append([nn.Upsample, [None, 2, 'nearest'], 17])  # Changed from 15 to 17
-
-        # Include all enhanced P3/8 features
-        layers.append([Concat, [[17, 5, 6, 7]], 18])  # Changed from [15, 5] to [17, 5, 6, 7]
-        c2 = 512 + 256 + 256 + 256  # Adjusted to include all three P3/8 features
-
-        layers.append([C2f, [c2, 256, 3, 1, act, False], 19])  # Changed from 17 to 19
-        c2 = 256
-        
-        # Downsampling path
-        layers.append([Conv, [c2, 256, 3, 2, 1, act], 20])  # Changed from 18 to 20
-        c2 = 256
-        layers.append([Concat, [[20, 16]], 21])  # Changed from [18, 14] to [20, 16]
-        c2 = 256 + 512
-        layers.append([C2f, [c2, 512, 3, 1, act, False], 22])  # Changed from 20 to 22
-        c2 = 512
-        
-        layers.append([Conv, [c2, 512, 3, 2, 1, act], 23])  # Changed from 21 to 23
-        c2 = 512
-        layers.append([Concat, [[23, 13]], 24])  # Changed from [21, 11] to [23, 13]
-        c2 = 512 + 1024
-        layers.append([C2f, [c2, 1024, 3, 1, act, False], 25])  # Changed from 23 to 25
-        c2 = 1024
-        
-        # Detection head
-        layers.append([Detect, [nc, [19, 22, 25]], 26])  # Changed from [17, 20, 23] to [19, 22, 25]
-        
-        self.save = save
-        return layers
-        
-    def _forward_once(self, x):
-        """Forward pass through the model."""
-        y = []
-        for m in self.model:
-            if m.f != -1:
-                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
-            x = m(x)
-            y.append(x if m.i in self.save else None)
-        return x
-
-def save_model_with_yaml(model, save_path):
-    """Save model with YAML attribute preserved."""
-    model_dict = {
-        'model': model,
-        'yaml_path': model.yaml if hasattr(model, 'yaml') else 'yolov8n.yaml'
-    }
-    torch.save(model_dict, save_path)
-    return save_path
-
-def load_model_with_yaml(model_path):
-    """Load model and restore YAML attribute."""
-    checkpoint = torch.load(model_path)
-    if isinstance(checkpoint, dict) and 'model' in checkpoint:
-        model = checkpoint['model']
-        yaml_path = checkpoint.get('yaml_path', 'yolov8n.yaml')
-        setattr(model, 'yaml', yaml_path)
-        return model
-    else:
-        model = checkpoint
-        if not hasattr(model, 'yaml'):
-            setattr(model, 'yaml', 'yolov8n.yaml')
-        return model
-
-def create_modified_yolov8(size='n', pretrained=False):
-    """
-    Create a modified YOLOv8 model with enhanced backbone.
-    
-    Args:
-        size (str): Model size - n, s, m, l, or x
-        pretrained (bool): Whether to load pretrained weights
-        
-    Returns:
-        YOLOv8Enhanced: Modified YOLOv8 model
-    """
-    print(f"Creating YOLOv8{size} enhanced model...")
-    
-    try:
-        import pkg_resources
-        yaml_path = pkg_resources.resource_filename('ultralytics', f'cfg/models/v8/yolov8{size}.yaml')
-        if not os.path.exists(yaml_path):
-            yaml_path = pkg_resources.resource_filename('ultralytics', f'models/v8/yolov8{size}.yaml')
-            if not os.path.exists(yaml_path):
-                yaml_path = f'yolov8{size}.yaml'
-                print(f"Using default YAML path: {yaml_path}")
-            else:
-                print(f"Found YAML at: {yaml_path}")
-        else:
-            print(f"Found YAML at: {yaml_path}")
-    except Exception as e:
-        print(f"Error finding YAML path: {e}")
-        yaml_path = f'yolov8{size}.yaml'
-        print(f"Using default YAML path: {yaml_path}")
-    
-    # Create model instance
-    model = YOLOv8Enhanced(yaml_path)
-    setattr(model, 'yaml', yaml_path)
-    
-    # Add safety for None values in forward pass
-    original_forward_once = model._forward_once
-    
-    def safe_forward_once(self, x):
-        """Safer forward pass that handles None values properly."""
-        y = []
-        for i, m in enumerate(self.model):
-            if m.f != -1:
-                try:
-                    if isinstance(m.f, int):
-                        x = y[m.f]
-                        # Safety check to avoid operating on None
-                        if x is None:
-                            # Skip this layer if the input is None
-                            y.append(None)
-                            continue
-                    else:
-                        # Handle list inputs safely
-                        inputs = [x if j == -1 else y[j] for j in m.f]
-                        # Check if any input is None
-                        if any(inp is None for inp in inputs):
-                            y.append(None)
-                            continue
-                        x = inputs
-                except Exception as e:
-                    print(f"Error in forward pass at layer {i}: {e}")
-                    y.append(None)
-                    continue
-            
-            try:
-                x = m(x)
-            except Exception as e:
-                print(f"Error processing layer {i} ({m.__class__.__name__}): {e}")
-                # Set output to None and continue
-                y.append(None)
-                continue
-            
-            y.append(x if m.i in self.save else None)
-        
-        return x
-    
-    # Apply the safer forward pass
-    model._forward_once = lambda x: safe_forward_once(model, x)
-    
-    # Print initial parameter count
-    initial_params = sum(p.numel() for p in model.parameters())
-    print(f"Initial model parameter count: {initial_params:,}")
-    
-    if pretrained:
-        try:
-            print("Loading pretrained weights...")
-            from ultralytics import YOLO
-            
-            try:
-                original_model = YOLO(f'yolov8{size}.pt')
-                print(f"Successfully loaded pretrained YOLOv8{size} model")
-                
-                pretrained_dict = original_model.model.state_dict()
-                model_dict = model.state_dict()
-                
-                pretrained_dict = {k: v for k, v in pretrained_dict.items() 
-                                if k in model_dict and v.shape == model_dict[k].shape}
-                
-                model_dict.update(pretrained_dict)
-                model.load_state_dict(model_dict)
-                
-                print(f"Loaded {len(pretrained_dict)}/{len(model_dict)} pretrained weights")
-            except Exception as e:
-                print(f"Error loading pretrained weights via YOLO: {e}")
-                print("Starting with random weights initialization")
-        except Exception as e:
-            print(f"Error during weight transfer: {e}")
-            print("Starting with random weights initialization")
-    
-    # Verify parameter count after loading weights
-    final_params = sum(p.numel() for p in model.parameters())
-    print(f"Final model parameter count: {final_params:,}")
-    
-    return model
-
-def create_enhanced_yolov8_direct(size='n', pretrained=True):
-    """
-    Create an enhanced YOLOv8 model by directly modifying an existing model.
-    This approach adapts to the actual model structure.
-    """
-    import torch
-    from ultralytics import YOLO
-    from copy import deepcopy
-    
-    # Load the base model
-    print(f"Loading base YOLOv8{size} model...")
-    model = YOLO(f'yolov8{size}.pt').model
-    
-    # Get original parameter count for verification
-    original_params = sum(p.numel() for p in model.parameters())
-    print(f"Original parameter count: {original_params:,}")
-    
-    # First, explore the model structure to find P3/8 scale
-    print("Model structure exploration:")
-    p3_layer_idx = None
-    p3_channel_size = None
-    
-    # Identify channel sizes in the model
-    for i, m in enumerate(model.model):
-        print(f"Layer {i}: {m.__class__.__name__}")
-        
-        # Extract channel size if possible
-        channel_size = None
-        if hasattr(m, 'cv2') and hasattr(m.cv2, 'conv'):
-            channel_size = m.cv2.conv.out_channels
-        elif hasattr(m, 'conv') and hasattr(m.conv, 'out_channels'):
-            channel_size = m.conv.out_channels
-        elif hasattr(m, 'out_channels'):
-            channel_size = m.out_channels
-        
-        if channel_size is not None:
-            print(f"  Channel size: {channel_size}")
-            
-        # Look for the C2f block in P3/8 scale (typically with 256 channels)
-        if isinstance(m, C2f) and channel_size == 256:
-            p3_layer_idx = i
-            p3_channel_size = channel_size
-            print(f"Found P3/8 scale at layer {i} with {channel_size} channels")
-            break
-    
-    if p3_layer_idx is None or p3_channel_size is None:
-        print("Could not identify P3/8 scale layer. Looking for any C2f with 256 channels.")
-        for i, m in enumerate(model.model):
-            if isinstance(m, C2f):
-                # Try to determine channel size
-                channel_size = None
-                if hasattr(m, 'cv2') and hasattr(m.cv2, 'conv'):
-                    channel_size = m.cv2.conv.out_channels
-                
-                if channel_size == 256:
-                    p3_layer_idx = i
-                    p3_channel_size = channel_size
-                    print(f"Using layer {i} with {channel_size} channels")
-                    break
-    
-    if p3_layer_idx is None or p3_channel_size is None:
-        raise ValueError("Could not identify appropriate layer for enhancement. Model structure not recognized.")
-    
-    # Create our custom enhancer modules
-    residual_c2f = ResidualC2f(p3_channel_size, p3_channel_size)
-    small_obj_enhance = SmallObjectEnhance(p3_channel_size, p3_channel_size)
-    
-    # We'll insert these modules directly in the model.model list
-    model_modules = list(model.model)
-    
-    # Insert after P3/8 C2f block
-    residual_c2f.i = p3_layer_idx + 1  # Next index
-    residual_c2f.f = p3_layer_idx  # Take input from C2f block
-    
-    small_obj_enhance.i = p3_layer_idx + 2  # Next index
-    small_obj_enhance.f = p3_layer_idx + 1  # Take input from ResidualC2f
-    
-    # Insert new modules
-    model_modules.insert(p3_layer_idx + 1, residual_c2f)
-    model_modules.insert(p3_layer_idx + 2, small_obj_enhance)
-    
-    # Update indices for all subsequent layers
-    for i in range(p3_layer_idx + 3, len(model_modules)):
-        model_modules[i].i = i
-        
-        # If this layer takes input from previous layers, update those indices
-        if hasattr(model_modules[i], 'f'):
-            if isinstance(model_modules[i].f, int) and model_modules[i].f >= p3_layer_idx + 1:
-                model_modules[i].f += 2  # Shift by 2 for our added modules
-            elif isinstance(model_modules[i].f, list):
-                model_modules[i].f = [f + 2 if isinstance(f, int) and f >= p3_layer_idx + 1 else f for f in model_modules[i].f]
-    
-    # Update the model
-    model.model = nn.ModuleList(model_modules)
-    
-    # Add P3/8 enhanced features to the save list if we can find it
-    if hasattr(model, 'save'):
-        print(f"Original save indices: {model.save}")
-        if p3_layer_idx in model.save:
-            model.save.append(p3_layer_idx + 1)  # ResidualC2f
-            model.save.append(p3_layer_idx + 2)  # SmallObjectEnhance
-            print(f"Updated save indices: {model.save}")
-    
-    # Find the neck concatenation for P3/8 features and update it
-    for i, m in enumerate(model.model):
-        if isinstance(m, Concat) and any(f == p3_layer_idx for f in m.f if isinstance(f, int)):
-            print(f"Found neck concat at layer {i} with inputs {m.f}")
-            
-            # Add our enhanced features to the concat
-            m.f.append(p3_layer_idx + 1)  # ResidualC2f
-            m.f.append(p3_layer_idx + 2)  # SmallObjectEnhance
-            print(f"Updated to include enhanced features: {m.f}")
-            
-            # Update next layer's input channels
-            if i + 1 < len(model.model) and hasattr(model.model[i+1], 'cv1'):
-                next_m = model.model[i+1]
-                old_channels = next_m.cv1.conv.in_channels
-                c_out = next_m.cv1.conv.out_channels
-                
-                # Create new Conv with updated channels
-                new_channels = old_channels + p3_channel_size * 2
-                next_m.cv1 = Conv(new_channels, c_out, 1, 1)
-                print(f"Updated next layer input channels: {old_channels} → {new_channels}")
-    
-    # Verify parameter count has changed
-    new_params = sum(p.numel() for p in model.parameters())
-    print(f"New parameter count: {new_params:,}")
-    print(f"Difference: {new_params - original_params:,} ({(new_params/original_params - 1)*100:.2f}% increase)")
-    
-    return model
-
-if __name__ == "__main__":
-    # Use the direct approach which has proven to work
-    enhanced_model = create_enhanced_yolov8_direct(size='n', pretrained=True)
-
-    try:
-        import torch
+        # Run a dummy forward pass to get dimensions
         dummy_input = torch.randn(1, 3, 640, 640)
         with torch.no_grad():
-            output = enhanced_model(dummy_input)
-        print("Forward pass successful")
-    except Exception as e:
-        print(f"Error during forward pass: {e}")
+            # Ensure base model is in eval mode during analysis
+            self.base_model.eval()
+            self.base_model(dummy_input)
+        
+        # Remove temporary hooks
+        for hook in temp_hooks:
+            hook.remove()
+        
+        # Store channel dimensions for layers where we'll insert custom modules
+        key_modules = []
+        
+        # Get all module outputs and note their shapes
+        for name, activation in self.activations.items():
+            if isinstance(activation, torch.Tensor):
+                self.channel_sizes[name] = activation.shape[1]  # Channel dimension
+                print(f"{name}: shape {activation.shape}, channels: {activation.shape[1]}")
+        
+        # Identify key points for insertion (indices can vary by model version)
+        # These are typical points after downsampling operations where feature maps change size
+        self.insertion_points = []
+        
+        # Storing all activation names sorted by channel size for easier identification
+        sorted_by_channels = sorted(self.channel_sizes.items(), key=lambda x: x[1])
+        
+        # Get layer names ordered by channel dimension (typically increases after downsampling)
+        self.ordered_layers = [name for name, _ in sorted_by_channels]
+        
+        # Identify key layers based on channel dimensions and position
+        # Let's identify layers with unique channel sizes as they typically come after downsampling
+        unique_channel_sizes = []
+        for _, channels in sorted_by_channels:
+            if channels not in unique_channel_sizes:
+                unique_channel_sizes.append(channels)
+        
+        # Get layers with the 2nd, 3rd, and 4th unique channel sizes
+        # These typically correspond to layers after downsampling operations
+        if len(unique_channel_sizes) >= 4:
+            target_channels = unique_channel_sizes[1:4]  # 2nd, 3rd, and 4th unique channel sizes
+            
+            for name, channels in sorted_by_channels:
+                if channels in target_channels and name not in self.insertion_points:
+                    self.insertion_points.append(name)
+                    target_channels.remove(channels)  # Only get the first layer with this channel size
+        
+        print(f"Identified insertion points: {self.insertion_points}")
+    
+    def _create_custom_layers(self):
+        """Create custom layers at specific channel sizes."""
+        self.custom_modules = nn.ModuleDict()
+        
+        # Create custom layers for each insertion point
+        for i, name in enumerate(self.insertion_points):
+            channels = self.channel_sizes[name]
+            
+            # First insertion point: Add ResidualC2f
+            if i == 0:
+                self.custom_modules[f"{name}_residual"] = ResidualC2f(channels, channels)
+                print(f"Created ResidualC2f layer for {name} with {channels} channels")
+            
+            # Second insertion point: Add ResidualC2f + SmallObjectEnhance
+            elif i == 1:
+                self.custom_modules[f"{name}_residual"] = ResidualC2f(channels, channels)
+                self.custom_modules[f"{name}_small_obj"] = SmallObjectEnhance(channels, channels)
+                print(f"Created ResidualC2f + SmallObjectEnhance layers for {name} with {channels} channels")
+            
+            # Third insertion point: Add ResidualC2f
+            elif i == 2:
+                self.custom_modules[f"{name}_residual"] = ResidualC2f(channels, channels)
+                print(f"Created ResidualC2f layer for {name} with {channels} channels")
+    
+    def _register_hooks(self):
+        """Register forward hooks to insert custom layer processing."""
+        # Clear any existing hooks
+        for hook in self.hooks:
+            hook.remove()
+        self.hooks = []
+        
+        # Define hook functions for each insertion point
+        def make_hook(name, custom_module_keys):
+            def hook(module, input, output):
+                # Process the output through our custom modules
+                x = output
+                for key in custom_module_keys:
+                    # Ensure our custom modules are in the same mode as the model
+                    self.custom_modules[key].train(self.training)
+                    x = self.custom_modules[key](x)
+                return x
+            return hook
+        
+        # Register hooks for each insertion point
+        for i, name in enumerate(self.insertion_points):
+            idx = int(name.split('_')[1])  # Get module index from name (e.g. "module_3" -> 3)
+            
+            # Determine which custom modules to apply
+            custom_module_keys = []
+            if i == 0:  # First insertion: ResidualC2f
+                custom_module_keys = [f"{name}_residual"]
+            elif i == 1:  # Second insertion: ResidualC2f + SmallObjectEnhance
+                custom_module_keys = [f"{name}_residual", f"{name}_small_obj"]
+            elif i == 2:  # Third insertion: ResidualC2f
+                custom_module_keys = [f"{name}_residual"]
+            
+            # Register the hook to modify the output
+            hook = self.base_model.model[idx].register_forward_hook(make_hook(name, custom_module_keys))
+            self.hooks.append(hook)
+    
+    def forward(self, x):
+        """Forward pass - delegates to base model with hooks for modifications."""
+        return self.base_model(x)
+    
+    def eval(self):
+        """Switch to evaluation mode."""
+        super().eval()
+        self.base_model.eval()
+        for module in self.custom_modules.values():
+            module.eval()
+        return self
+    
+    def train(self, mode=True):
+        """Switch to training mode."""
+        super().train(mode)
+        if mode:
+            self.base_model.train()
+            for module in self.custom_modules.values():
+                module.train()
+        else:
+            self.base_model.eval()
+            for module in self.custom_modules.values():
+                module.eval()
+        return self
+
+def create_enhanced_yolov8(size='n', pretrained=True):
+    """
+    Create an enhanced YOLOv8 model with custom architecture for small object detection.
+    
+    Args:
+        size (str): Model size 'n', 's', 'm', 'l', or 'x'
+        pretrained (bool): Whether to load pretrained weights
+    
+    Returns:
+        Enhanced YOLOv8 model
+    """
+    model = EnhancedYOLOv8(size=size, pretrained=pretrained)
+    # Set to eval mode by default for inference
+    model.eval()
+    return model
+
+def save_model_with_yaml(model, path):
+    """Save model with its yaml configuration."""
+    # Create a dictionary to store the model state and configuration
+    save_dict = {
+        'model': model.state_dict(),
+        'base_model': model.base_model.state_dict() if hasattr(model, 'base_model') else None,
+        'yaml': model.yaml if hasattr(model, 'yaml') else None,
+        'names': model.names if hasattr(model, 'names') else None,
+        'stride': model.stride if hasattr(model, 'stride') else None,
+        'custom_modules': {name: module.state_dict() for name, module in 
+                           model.custom_modules.items()} if hasattr(model, 'custom_modules') else None,
+        'channel_sizes': model.channel_sizes if hasattr(model, 'channel_sizes') else None,
+        'insertion_points': model.insertion_points if hasattr(model, 'insertion_points') else None
+    }
+    
+    # Save the dictionary
+    torch.save(save_dict, path)
+    print(f"Model saved to {path}")
+
+def load_model_with_yaml(path):
+    """Load enhanced model from saved state."""
+    # Load the saved state
+    data = torch.load(path, map_location='cpu')
+    
+    # Determine model size from parameter count or filename
+    size = 'n'  # Default to nano
+    if 'yolov8s' in path.lower():
+        size = 's'
+    elif 'yolov8m' in path.lower():
+        size = 'm'
+    elif 'yolov8l' in path.lower():
+        size = 'l'
+    elif 'yolov8x' in path.lower():
+        size = 'x'
+    
+    # Create a new model instance
+    model = create_enhanced_yolov8(size=size, pretrained=False)
+    
+    # Load state dictionary if it's our enhanced model format
+    if 'custom_modules' in data and data['custom_modules'] is not None:
+        print("Loading enhanced model state...")
+        
+        # Load base model state
+        if 'base_model' in data and data['base_model'] is not None:
+            model.base_model.load_state_dict(data['base_model'])
+        
+        # Load custom modules
+        for name, state in data['custom_modules'].items():
+            if name in model.custom_modules:
+                model.custom_modules[name].load_state_dict(state)
+        
+        # Restore configuration data
+        if 'names' in data and data['names'] is not None:
+            model.names = data['names']
+        if 'stride' in data and data['stride'] is not None:
+            model.stride = data['stride']
+        if 'yaml' in data and data['yaml'] is not None:
+            model.yaml = data['yaml']
+        
+        # Restore structural data
+        if 'channel_sizes' in data and data['channel_sizes'] is not None:
+            model.channel_sizes = data['channel_sizes']
+        if 'insertion_points' in data and data['insertion_points'] is not None:
+            model.insertion_points = data['insertion_points']
+        
+        print("Enhanced model loaded successfully")
+    else:
+        # If it's a standard YOLO model, create a new enhanced model from it
+        print("Loading as standard YOLO model and enhancing it...")
+        standard_model = YOLO(path)
+        enhanced_model = create_enhanced_yolov8(size=size, pretrained=False)
+        
+        # Transfer weights from standard model base to enhanced model base
+        enhanced_model.base_model.load_state_dict(standard_model.model.state_dict())
+        model = enhanced_model
+    
+    # Ensure model is in eval mode after loading
+    model.eval()
+    return model

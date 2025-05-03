@@ -3,7 +3,7 @@ import torch
 import yaml
 from pathlib import Path
 from ultralytics import YOLO
-from modified_yolov8 import create_modified_yolov8, save_model_with_yaml, load_model_with_yaml
+from modified_yolov8 import create_enhanced_yolov8, save_model_with_yaml, load_model_with_yaml
 
 def select_device(device_name=None):
     """Auto-detect device if not specified."""
@@ -16,15 +16,83 @@ def select_device(device_name=None):
     for i in range(torch.cuda.device_count()):
         current_device_name = torch.cuda.get_device_name(i)
         print(f"CUDA device {i}: {current_device_name}")
-        if current_device_name == device_name:
+        if device_name and current_device_name == device_name:
             print(f"Selected {device_name} (CUDA:{i})")
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{i}"
             print(f"Set CUDA_VISIBLE_DEVICES={i}, GPU is now accessible as device 0")
             return "0"
+    
+    # If no specified device found or no device name provided, use the first GPU
+    if torch.cuda.device_count() > 0:
+        print(f"No specific GPU selected. Using first available GPU: {torch.cuda.get_device_name(0)}")
+        return "0"
         
-    if device_name == None:
-        print("No GPU name provided. Returning CPU")
-        return 'cpu'
+    print("No GPU found. Using CPU")
+    return 'cpu'
+
+def prepare_for_training(model, data_yaml_path):
+    """
+    Convert the enhanced model to YOLO format for training.
+    
+    In order to train with YOLO's training pipeline, we need to:
+    1. Save our enhanced model
+    2. Create a standard YOLO model with the same weights
+    3. Use YOLO's training methods
+    """
+    print("Converting enhanced model to YOLO format for training...")
+    
+    # Save our enhanced model to a temporary file
+    os.makedirs('models', exist_ok=True)
+    model_path = f"models/enhanced_yolov8_temp.pt"
+    save_model_with_yaml(model, model_path)
+    
+    # The simplest approach: create a new YOLO model with the same size and copy weights
+    if hasattr(model, 'base_model'):
+        # Determine the model size
+        size = 'n'  # Default size
+        for s in ['n', 's', 'm', 'l', 'x']:
+            if f'yolov8{s}' in str(model.__class__).lower():
+                size = s
+                break
+        
+        # Create a fresh YOLO model
+        yolo_model = YOLO(f'yolov8{size}.pt')
+        
+        # Copy weights from our base model to the YOLO model
+        with torch.no_grad():
+            # Get state dict from our base model
+            base_model_state = model.base_model.state_dict()
+            
+            # Get state dict from YOLO model
+            yolo_state = yolo_model.model.state_dict()
+            
+            # Copy matching parameters
+            for name, param in base_model_state.items():
+                if name in yolo_state and yolo_state[name].shape == param.shape:
+                    yolo_state[name].copy_(param)
+            
+            # Load the updated state dict back to YOLO model
+            yolo_model.model.load_state_dict(yolo_state)
+        
+        print(f"Created YOLO model with copied weights from enhanced model")
+    else:
+        # If we can't extract the base model, try loading the entire model directly
+        try:
+            yolo_model = YOLO(model_path)
+        except Exception as e:
+            print(f"Error loading enhanced model directly: {e}")
+            print("Creating default YOLO model as fallback")
+            yolo_model = YOLO('yolov8n.pt')
+    
+    # Save the YOLO model temporarily so we have a clean checkpoint to start from
+    yolo_temp_path = 'models/yolo_temp.pt'
+    yolo_model.save(yolo_temp_path)
+    
+    # Reload to ensure everything is clean
+    yolo_model = YOLO(yolo_temp_path)
+    
+    print("Model prepared for YOLO training")
+    return yolo_model, model_path
 
 def train_enhanced_yolov8(
     data_yaml_path,
@@ -38,32 +106,32 @@ def train_enhanced_yolov8(
     workers=8,
     run_name=None,
     learning_rate=0.00005,  # Reduced learning rate for deeper model
-    warmup_epochs=5,       # Warmup period for better convergence
-    weight_decay=0.0005    # Weight decay for regularization
+    warmup_epochs=5,        # Warmup period for better convergence
+    weight_decay=0.0005     # Weight decay for regularization
 ):
     """
     Train an enhanced YOLOv8 model with deeper feature extraction and improved settings.
     """
     if device is None:
-        device = select_device('NVIDIA GeForce GTX 1660 Ti with Max-Q Design')
+        device = select_device()
     
     print(f"Using device: {device}")
     
     # Create the enhanced model
-    enhanced_model = create_modified_yolov8(size=size, pretrained=pretrained)
+    enhanced_model = create_enhanced_yolov8(size=size, pretrained=pretrained)
     
     # Count parameters to confirm it's the enhanced version
     param_count = sum(p.numel() for p in enhanced_model.parameters())
     print(f"Enhanced model created with {param_count:,} parameters")
     
-    # Save model
+    # Save our fully enhanced model for later use
     os.makedirs('models', exist_ok=True)
-    model_path = f"models/enhanced_yolov8{size}_init.pt"
-    save_model_with_yaml(enhanced_model, model_path)
-    print(f"Saved initial model to {model_path}")
+    enhanced_model_path = f"models/enhanced_yolov8{size}_init.pt"
+    save_model_with_yaml(enhanced_model, enhanced_model_path)
+    print(f"Saved initial enhanced model to {enhanced_model_path}")
     
-    # Create YOLO model for training
-    yolo_model = YOLO(model_path)
+    # Prepare for training with YOLO framework (extracts base model)
+    yolo_model, base_model_path = prepare_for_training(enhanced_model, data_yaml_path)
     
     # Configure improved training settings
     training_args = {
@@ -111,6 +179,13 @@ def train_enhanced_yolov8(
         "dropout": 0.05                # Dropout rate for regularization
     }
     
+    # Small object specific augmentations (using only valid parameters)
+    training_args.update({
+        "max_det": 300,                # Increase maximum detections
+        "iou": 0.6,                    # IoU threshold for evaluation
+        "kobj": 1.0                    # Object loss gain (replaces obj_pw)
+    })
+    
     # Start training
     print(f"\n*** Starting training with enhanced YOLOv8{size} model ***")
     print(f"Training for {epochs} epochs with batch size {batch_size}")
@@ -136,7 +211,44 @@ def train_enhanced_yolov8(
                 return None
         
         print(f"Training completed successfully. Best model: {best_model_path}")
-        return best_model_path
+        
+        # Convert the trained base model back to our enhanced format
+        try:
+            print("Converting trained model back to enhanced format...")
+            
+            # Create a new enhanced model with the same architecture
+            new_enhanced = create_enhanced_yolov8(size=size, pretrained=False)
+            
+            # Load the trained weights into the base model
+            trained_model = YOLO(best_model_path)
+            
+            # Copy weights from the trained YOLO model to our enhanced model's base
+            with torch.no_grad():
+                # Get state dict from the trained model
+                trained_state = trained_model.model.state_dict()
+                
+                # Get state dict from our base model
+                base_state = new_enhanced.base_model.state_dict()
+                
+                # Copy matching parameters
+                for name, param in trained_state.items():
+                    if name in base_state and base_state[name].shape == param.shape:
+                        base_state[name].copy_(param)
+                
+                # Load the updated state dict back to our base model
+                new_enhanced.base_model.load_state_dict(base_state)
+            
+            # Save the final enhanced model
+            final_path = f"models/enhanced_yolov8{size}_final.pt"
+            save_model_with_yaml(new_enhanced, final_path)
+            print(f"Saved final enhanced model to: {final_path}")
+            
+            return final_path
+        except Exception as e:
+            print(f"Warning: Error converting trained model to enhanced format: {e}")
+            print(f"Returning standard trained model path: {best_model_path}")
+            return best_model_path
+        
     except Exception as e:
         print(f"Error during training: {e}")
         import traceback
@@ -158,7 +270,7 @@ def continue_training(
 ):
     """Continue training from a previously trained checkpoint with optimized parameters."""
     if device is None:
-        device = select_device('NVIDIA GeForce GTX 1660 Ti with Max-Q Design')
+        device = select_device()
     
     print(f"Using device: {device}")
     
@@ -166,43 +278,56 @@ def continue_training(
         print(f"Error: Model path {model_path} does not exist.")
         return None
     
-    # Create a fresh instance of the enhanced model
-    enhanced_model = create_modified_yolov8(size='n', pretrained=False)
+    # Try to load as an enhanced model
+    try:
+        print(f"Loading model from {model_path} as enhanced model...")
+        enhanced_model = load_model_with_yaml(model_path)
+        print("Successfully loaded as enhanced model")
+    except Exception as e:
+        print(f"Error loading as enhanced model: {e}")
+        print("Attempting to load as standard YOLO model...")
+        
+        try:
+            # Create a new enhanced model
+            size = 'n'  # Default
+            if 'yolov8s' in model_path.lower():
+                size = 's'
+            elif 'yolov8m' in model_path.lower():
+                size = 'm'
+            elif 'yolov8l' in model_path.lower():
+                size = 'l'
+            elif 'yolov8x' in model_path.lower():
+                size = 'x'
+            
+            enhanced_model = create_enhanced_yolov8(size=size, pretrained=False)
+            
+            # Load the standard YOLO model
+            yolo_model = YOLO(model_path)
+            
+            # Copy weights from the YOLO model to our enhanced model's base
+            with torch.no_grad():
+                # Get state dict from the YOLO model
+                yolo_state = yolo_model.model.state_dict()
+                
+                # Get state dict from our base model
+                base_state = enhanced_model.base_model.state_dict()
+                
+                # Copy matching parameters
+                for name, param in yolo_state.items():
+                    if name in base_state and base_state[name].shape == param.shape:
+                        base_state[name].copy_(param)
+                
+                # Load the updated state dict back to our base model
+                enhanced_model.base_model.load_state_dict(base_state)
+            
+            print(f"Created enhanced model from standard YOLO model")
+        except Exception as e2:
+            print(f"Error creating enhanced model: {e2}")
+            print("Using standard YOLO model directly")
+            return None
     
-    # Load weights from checkpoint
-    checkpoint = torch.load(model_path, map_location='cpu')
-    
-    # Extract state_dict
-    if isinstance(checkpoint, dict):
-        if 'model' in checkpoint:
-            if hasattr(checkpoint['model'], 'state_dict'):
-                state_dict = checkpoint['model'].state_dict()
-            else:
-                state_dict = checkpoint['model']
-        elif 'state_dict' in checkpoint:
-            state_dict = checkpoint['state_dict']
-        else:
-            state_dict = checkpoint
-    else:
-        state_dict = checkpoint.state_dict() if hasattr(checkpoint, 'state_dict') else checkpoint
-    
-    # Load matching weights
-    enhanced_model_dict = enhanced_model.state_dict()
-    matched_weights = {}
-    for name, param in state_dict.items():
-        if name in enhanced_model_dict and enhanced_model_dict[name].shape == param.shape:
-            matched_weights[name] = param
-    
-    print(f"Loaded {len(matched_weights)}/{len(enhanced_model_dict)} weights from checkpoint")
-    enhanced_model.load_state_dict(matched_weights, strict=False)
-    
-    # Save with YAML attribute preserved
-    os.makedirs('models', exist_ok=True)
-    temp_path = f"models/enhanced_continue.pt"
-    save_model_with_yaml(enhanced_model, temp_path)
-    
-    # Create YOLO model
-    yolo_model = YOLO(temp_path)
+    # Prepare for training with YOLO framework
+    yolo_model, base_model_path = prepare_for_training(enhanced_model, data_yaml_path)
     
     # Configure training settings for fine-tuning
     training_args = {
@@ -234,9 +359,19 @@ def continue_training(
         "mixup": 0.05,
         "copy_paste": 0.1,
         "label_smoothing": 0.05,
-        "dropout": 0.05,             # Lower dropout for fine-tuning
+        "dropout": 0.05,               # Lower dropout for fine-tuning
         "scale": 0.8
     }
+    
+    # Small object specific fine-tuning
+    training_args.update({
+        "max_det": 300,                # Increase maximum detections
+        "nms_time_threshold": 50,      # Time threshold for NMS
+        "iou": 0.6,                    # IoU threshold for evaluation
+        "cls_pw": 1.0,                 # cls BCELoss positive_weight
+        "obj_pw": 1.0,                 # obj BCELoss positive_weight
+        "iou_t": 0.6                   # IoU training threshold
+    })
     
     # Start training
     print(f"\n*** Continuing training for {epochs} epochs with enhanced architecture ***")
@@ -249,9 +384,55 @@ def continue_training(
         if not best_model_path or not os.path.exists(best_model_path):
             output_dir = f"enhanced_yolov8_continued/{run_name if run_name else 'continued_training'}"
             best_model_path = os.path.join(output_dir, "weights", "best.pt")
+            last_model_path = os.path.join(output_dir, "weights", "last.pt")
             
+            if os.path.exists(best_model_path):
+                print(f"Best model found at: {best_model_path}")
+            elif os.path.exists(last_model_path):
+                print(f"Best model not found. Using last model instead: {last_model_path}")
+                best_model_path = last_model_path
+            else:
+                print("No model files found after training.")
+                return None
+        
         print(f"Continued training completed successfully. Best model: {best_model_path}")
-        return best_model_path
+        
+        # Convert the trained base model back to our enhanced format
+        try:
+            print("Converting trained model back to enhanced format...")
+            
+            # Create a new enhanced model with the same architecture
+            new_enhanced = create_enhanced_yolov8(size=size, pretrained=False)
+            
+            # Load the trained weights into the base model
+            trained_model = YOLO(best_model_path)
+            
+            # Copy weights from the trained YOLO model to our enhanced model's base
+            with torch.no_grad():
+                # Get state dict from the trained model
+                trained_state = trained_model.model.state_dict()
+                
+                # Get state dict from our base model
+                base_state = new_enhanced.base_model.state_dict()
+                
+                # Copy matching parameters
+                for name, param in trained_state.items():
+                    if name in base_state and base_state[name].shape == param.shape:
+                        base_state[name].copy_(param)
+                
+                # Load the updated state dict back to our base model
+                new_enhanced.base_model.load_state_dict(base_state)
+            
+            # Save the final enhanced model
+            final_path = f"models/enhanced_yolov8_continued_final.pt"
+            save_model_with_yaml(new_enhanced, final_path)
+            print(f"Saved final enhanced model to: {final_path}")
+            
+            return final_path
+        except Exception as e:
+            print(f"Warning: Error converting trained model to enhanced format: {e}")
+            print(f"Returning standard trained model path: {best_model_path}")
+            return best_model_path
     except Exception as e:
         print(f"Error during continued training: {e}")
         import traceback
@@ -259,9 +440,12 @@ def continue_training(
         return None
 
 def main():
-    data_yaml_path = "C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\baby\\data.yaml"
+    """Main function to run the training script."""
+    # Ask for data.yaml path
+    data_yaml_path = input("Enter the path to your data.yaml file: ")
     
     def get_next_dir_number(base_dir):
+        """Get the next run number for organizing output directories."""
         import os
         import re
         
@@ -330,6 +514,7 @@ def main():
             print(f"\nTraining complete! Best model saved at: {best_model_path}")
             
             print("\nRunning validation on the trained model...")
+            # Validation using YOLO's built-in validation
             model = YOLO(best_model_path)
             model.val(data=data_yaml_path)
         else:

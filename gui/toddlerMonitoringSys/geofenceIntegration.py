@@ -167,9 +167,6 @@ class GeofenceManager:
             
             # Disable clear button when not in editing mode
             self.clear_button.setEnabled(False)
-        
-        # Update the UI
-        self.parent.ui.cameraView.update()
     
     def clear_geofence(self):
         """Clear all geofence points"""
@@ -196,8 +193,11 @@ class GeofenceManager:
             self.saved_geofence = self.points.copy()
             self.editing_mode = False
             self.toggle_edit_button.setText("Edit Geofence")
+            
+            # Update the status label with initial status
             self.status_label.setText("Active")
             self.status_label.setStyleSheet("color: #66BB6A; font-weight: bold;")
+            
             self.parent.ui.update_status("Geofence saved successfully", "success")
             
             # Disable clear button when exiting edit mode
@@ -206,9 +206,11 @@ class GeofenceManager:
             
             # Reset toddler states when saving a new geofence
             self.toddler_states = {}
+            self.toddlers_inside_count = 0
+            self.hazards_inside_geofence = []
         else:
             QMessageBox.warning(self.parent, "Invalid Geofence", 
-                               "Please add at least 3 points to create a valid geofence.")
+                            "Please add at least 3 points to create a valid geofence.")
     
     def point_in_polygon(self, x, y, polygon):
         """Determine if point (x,y) is inside the polygon using ray casting algorithm"""
@@ -278,6 +280,10 @@ class GeofenceManager:
                 status_message = f"Toddler detected {'inside' if is_inside else 'outside'} safe area!"
                 self.parent.ui.update_status(status_message, status_type)
                 
+                # Additional status update for inside geofence with a clearer message
+                if is_inside:
+                    self.parent.ui.update_status("SAFETY ALERT: Toddler is INSIDE protected zone!", "success")
+                
                 # Play sound alert if outside
                 if not is_inside:
                     self.parent.ui.play_alarm_sound()
@@ -288,9 +294,12 @@ class GeofenceManager:
                 
                 # Send state change alert
                 if is_inside:
-                    self.parent.ui.update_status("ALERT: Toddler has entered the safe area", "success")
+                    # More prominent message when toddler enters safe area
+                    self.parent.ui.update_status("SAFETY ALERT: Toddler has entered the protected zone", "success")
+                    # Optional: You could play a different sound for positive alerts
+                    # self.parent.ui.play_positive_sound()  # You would need to implement this method
                 else:
-                    self.parent.ui.update_status("ALERT: Toddler has left the safe area!", "warning")
+                    self.parent.ui.update_status("DANGER ALERT: Toddler has left the safe area!", "warning")
                     self.parent.ui.play_alarm_sound()
         
         # Store the count of toddlers inside for combined status check
@@ -320,18 +329,32 @@ class GeofenceManager:
         
         # Update the toddler status display
         if total_toddlers > 0:
-            if toddlers_outside > 0:
-                self.toddler_status.setText(f"{toddlers_inside}/{total_toddlers} toddlers in safe zone")
-                self.toddler_status.setStyleSheet("color: #FFA726; font-weight: bold;")  # Orange
+            if toddlers_inside > 0:
+                # Highlight that there are toddlers inside the safe zone
+                if toddlers_inside == total_toddlers:
+                    self.toddler_status.setText(f"All toddlers in safe zone ✓")
+                    self.toddler_status.setStyleSheet("color: #66BB6A; font-weight: bold;")  # Green
+                else:
+                    self.toddler_status.setText(f"{toddlers_inside}/{total_toddlers} toddlers in safe zone")
+                    self.toddler_status.setStyleSheet("color: #FFA726; font-weight: bold;")  # Orange
             else:
-                self.toddler_status.setText(f"All toddlers in safe zone")
-                self.toddler_status.setStyleSheet("color: #66BB6A; font-weight: bold;")  # Green
+                self.toddler_status.setText(f"No toddlers in safe zone!")
+                self.toddler_status.setStyleSheet("color: #FF5252; font-weight: bold;")  # Red
         else:
             self.toddler_status.setText("No toddlers detected")
             self.toddler_status.setStyleSheet("color: #B0B0C0;")  # Gray
             
         # After updating toddler status, check combined status
         self.check_combined_status()
+        
+        # Periodically refresh status about toddlers in geofence (every ~3 seconds)
+        # This ensures the status remains visible even if there are no state changes
+        current_time = time.time()
+        if not hasattr(self, 'last_status_update') or current_time - self.last_status_update > 3:
+            self.last_status_update = current_time
+            if toddlers_inside > 0:
+                plural = "s" if toddlers_inside > 1 else ""
+                self.parent.ui.update_status(f"STATUS: {toddlers_inside} toddler{plural} currently inside safe zone", "info")
 
 
     def check_hazards_in_geofence(self, other_objects):
@@ -373,42 +396,47 @@ class GeofenceManager:
         # Update the view to reflect any color changes
         self.parent.ui.cameraView.update()
     
-    def check_combined_status(self):
-        """Check if both toddlers and hazards are detected inside the geofence"""
-        import time
-        current_time = time.time()
+    def update_status_label_counts(self):
+        """Update the status label with counts of toddlers and hazards in the geofence area"""
+        # Only update if geofence is active
+        if not self.saved_geofence or len(self.saved_geofence) < 3:
+            return
         
-        # Check if both toddlers and hazards are inside the geofence
-        if self.toddlers_inside_count > 0 and len(self.hazards_inside_geofence) > 0:
-            # Set the combined alert flag
-            self.combined_alert_active = True
-            self.flash_geofence = True
+        # Format the status text based on what's detected
+        status_text = "Active"
+        
+        # If we have toddlers inside, add that info
+        if self.toddlers_inside_count > 0:
+            toddler_text = "toddler" if self.toddlers_inside_count == 1 else "toddlers"
+            status_text += f" | {self.toddlers_inside_count} {toddler_text}"
+        
+        # If we have hazards inside, add that info
+        if len(self.hazards_inside_geofence) > 0:
+            hazard_text = "hazard" if len(self.hazards_inside_geofence) == 1 else "hazards"
+            status_text += f" | {len(self.hazards_inside_geofence)} {hazard_text}"
             
-            # Only send a new alert if it's been at least 3 seconds since the last one
-            # This prevents alert spam
-            if current_time - self.last_alert_time > 3.0:
-                self.last_alert_time = current_time
-                
-                # Generate a more detailed warning message
-                toddler_text = "toddler" if self.toddlers_inside_count == 1 else "toddlers"
+            # If there are specific hazards, list them in parentheses
+            if len(self.hazards_inside_geofence) <= 3:  # Only show details if 3 or fewer hazards
                 hazards_str = ", ".join(self.hazards_inside_geofence)
-                
-                warning_message = f"⚠️ CRITICAL ALERT: {self.toddlers_inside_count} {toddler_text} and hazardous item(s) ({hazards_str}) are BOTH in the safe area!"
-                
-                # Update status with higher priority warning
-                self.parent.ui.update_status(warning_message, "warning")
-                
-                # Play alarm sound with higher urgency
-                self.parent.ui.play_alarm_sound()
-                
-                # Send notification if notification manager is available
-                if hasattr(self.parent.ui, 'notification_manager'):
-                    self.parent.ui.notification_manager.send_notification(warning_message)
+                status_text += f" ({hazards_str})"
+        
+        # Update the status label text
+        self.status_label.setText(status_text)
+        
+        # Change the color based on what's detected
+        if self.toddlers_inside_count > 0 and len(self.hazards_inside_geofence) > 0:
+            # Red for both toddlers and hazards (critical)
+            self.status_label.setStyleSheet("color: #FF0000; font-weight: bold;")
+        elif len(self.hazards_inside_geofence) > 0:
+            # Orange for hazards only (warning)
+            self.status_label.setStyleSheet("color: #FFA726; font-weight: bold;")
+        elif self.toddlers_inside_count > 0:
+            # Green for toddlers only (safe)
+            self.status_label.setStyleSheet("color: #66BB6A; font-weight: bold;")
         else:
-            # Reset alert status if conditions no longer met
-            self.combined_alert_active = False
-            self.flash_geofence = False
-            
+            # Blue for active but nothing detected
+            self.status_label.setStyleSheet("color: #2979FF; font-weight: bold;")
+
     def mouse_press_event(self, event):
         """Handle mouse press event for adding/selecting points"""
         if not self.editing_mode:
@@ -585,7 +613,40 @@ class GeofenceManager:
                     int(point.y + 5 + offset_y),
                     str(i + 1)
                 )
-
+        # Add overlay indicator for toddlers inside geofence
+        if not self.editing_mode and self.saved_geofence and hasattr(self, 'toddlers_inside_count'):
+            if self.toddlers_inside_count > 0:
+                # Draw a semi-transparent background box
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QBrush(QColor(0, 0, 0, 150)))  # Semi-transparent black
+                
+                # Position in top-right corner
+                overlay_width = 180
+                overlay_height = 30
+                margin = 10
+                painter.drawRoundedRect(
+                    painter.device().width() - overlay_width - margin,
+                    margin,
+                    overlay_width,
+                    overlay_height,
+                    8, 8  # Corner radius
+                )
+                
+                # Draw the text
+                painter.setPen(QPen(QColor(255, 255, 255)))  # White text
+                font = painter.font()
+                font.setPointSize(10)
+                font.setBold(True)
+                painter.setFont(font)
+                
+                plural = "s" if self.toddlers_inside_count > 1 else ""
+                text = f"✓ {self.toddlers_inside_count} Toddler{plural} in Safe Zone"
+                
+                painter.drawText(
+                    painter.device().width() - overlay_width - margin + 10,
+                    margin + 20,  # Adjust for text baseline
+                    text
+                )
 def integrate_geofence(main_window):
     """Initialize and connect geofence functionality to the main window"""
     geofence_manager = GeofenceManager(main_window)

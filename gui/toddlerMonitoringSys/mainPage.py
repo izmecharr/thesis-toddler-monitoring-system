@@ -558,7 +558,7 @@ class Ui_MainWindow(object):
         
         # Define hazardous objects list
         self.hazardous_objects = [
-            'coin', 'drink', 'fork', 'hammer', 'screwdriver', 'stapler', 'sharp-item', 'scissors'
+            'coin', 'drink', 'fork', 'hammer', 'screwdriver', 'stapler', 'sharp-item', 'cell phone'
         ]
         
         # Connect buttons to functions
@@ -914,8 +914,15 @@ class Ui_MainWindow(object):
                                     # Notification would go here if you have a notification system
                                     self.play_alarm_sound()
                     
-                    # Show count of detected objects
+                    # Show count of detected objects and hazards
+                    detected_hazards = [obj_name for obj_name, _, _, _, _, _ in other_objects 
+                                    if self.is_hazardous(obj_name)]
                     status_text = f"Detected: {len(toddlers)} toddlers, {len(other_objects)} other objects"
+
+                    # Add hazards if any detected
+                    if detected_hazards:
+                        hazards_text = ", ".join(detected_hazards)
+                        status_text += f" | Hazards: {hazards_text}"
                     self.statusbar.showMessage(status_text)
                 else:
                     # No detections

@@ -19,7 +19,7 @@ setup_qt_plugins()
 
 # At the top of your mainApp.py file
 
-sys.path.append(r'C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui')
+sys.path.append(r'C:\\Users\\izzze\\OneDrive\\Documents\\Github\\gui')
 from mainPage import ToddlerMonitoringSystem, DarkThemeStyle
 
 # Import the mobile integration components

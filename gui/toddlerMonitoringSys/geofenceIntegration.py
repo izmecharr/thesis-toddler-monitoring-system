@@ -3,7 +3,11 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt, QPoint, QPointF
 from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QPainterPath
 from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton, QMessageBox, QLabel
+import time
 
+from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QPainterPath, QImage, QPixmap
+from PyQt5.QtCore import Qt, QPoint, QPointF, QRect
+from config import HAZARDOUS_OBJECTS
 class GeofencePoint:
     """Represents a draggable point in the geofence"""
     def __init__(self, x, y):
@@ -23,7 +27,7 @@ class GeofencePoint:
 
 class GeofenceManager:
     """Manages geofence functionality"""
-    def __init__(self, parent):
+    def __init__(self, parent, hazardous_objects=None):
         self.parent = parent
         self.points = []
         self.saved_geofence = []  # The currently active geofence
@@ -32,7 +36,8 @@ class GeofenceManager:
         self.dragging_point = None
         self.alert_active = False
         self.hazard_detected = False
-        
+        self.hazardous_objects = HAZARDOUS_OBJECTS.copy()
+
         # Add these attributes for the combined status check
         self.toddlers_inside_count = 0
         self.hazards_inside_geofence = []
@@ -44,6 +49,15 @@ class GeofenceManager:
         self.toddler_states = {}  # Dictionary to track each toddler's position (in/out)
         self.setup_ui()
         
+        # Use the provided list or a default if None
+        if hazardous_objects is not None:
+            self.hazardous_objects = hazardous_objects.copy()
+        else:
+            # Fallback default list
+            self.hazardous_objects = [
+                'coin', 'drink', 'fork', 'hammer', 'screwdriver', 'stapler', 
+                'sharp-item', 'cell phone', 'knife', 'scissor', 'battery'
+            ]
     def setup_ui(self):
         """Set up the geofence buttons and controls"""
         # Create a container frame for geofence tools
@@ -350,15 +364,16 @@ class GeofenceManager:
         # Periodically refresh status about toddlers in geofence (every ~3 seconds)
         # This ensures the status remains visible even if there are no state changes
         current_time = time.time()
+
         if not hasattr(self, 'last_status_update') or current_time - self.last_status_update > 3:
             self.last_status_update = current_time
             if toddlers_inside > 0:
                 plural = "s" if toddlers_inside > 1 else ""
-                self.parent.ui.update_status(f"STATUS: {toddlers_inside} toddler{plural} currently inside safe zone", "info")
+                self.parent.ui.update_status(f"STATUS: {toddlers_inside} toddler{plural} currently inside safe zone", "success")
 
 
-    def check_hazards_in_geofence(self, other_objects):
-        """Check if hazardous objects are inside the geofence"""
+    def check_objects_in_geofence(self, other_objects):
+        """Check if objects are inside the geofence and color-code them based on hazard status"""
         if not self.saved_geofence or len(self.saved_geofence) < 3:
             return
             
@@ -366,29 +381,132 @@ class GeofenceManager:
         self.hazard_detected = False
         # Clear the hazards list
         self.hazards_inside_geofence = []
-            
-        # List of specific objects considered hazardous
-        hazardous_objects = ['coin', 'drink', 'fork', 'hammer', 'screwdriver', 'stapler', 'sharp-item', 'cell phone']
         
-        for obj_name, ox1, oy1, ox2, oy2, _ in other_objects:
-            # Check if object is in the hazardous list
-            if any(hazard in obj_name.lower() for hazard in hazardous_objects):
-                # Get object center point
-                center_x = (ox1 + ox2) // 2
-                center_y = (oy1 + oy2) // 2
-                
-                # Check if center point is inside geofence
-                is_inside = self.point_in_polygon(center_x, center_y, self.saved_geofence)
-                
-                # Show alert if hazardous object is inside the geofence
+        # Get access to the camera view
+        camera_view = self.parent.ui.cameraView
+        pixmap = camera_view.pixmap()
+        
+        if pixmap is None:
+            return
+        
+        # Get current frame as an image we can modify
+        current_image = pixmap.toImage()
+        width = current_image.width()
+        height = current_image.height()
+        
+        # Get a QPainter to draw on the image
+        painter = QPainter(current_image)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Process all objects
+        objects_inside = []
+        objects_outside = []
+        
+        for obj_name, ox1, oy1, ox2, oy2, conf, is_hazardous in objects:
+            # Get object center point
+            center_x = (ox1 + ox2) // 2
+            center_y = (oy1 + oy2) // 2
+            
+            # Check if center point is inside geofence
+            is_inside = self.point_in_polygon(center_x, center_y, self.saved_geofence)
+            
+            # Determine color based on hazard status
+            if is_hazardous:
+                color = QColor(255, 0, 0)  # Red for hazardous objects
+                # If inside geofence and hazardous, add to hazards list
                 if is_inside:
                     self.hazard_detected = True
-                    # Add to the list of hazards inside
                     self.hazards_inside_geofence.append(obj_name)
-                    # Only show individual hazard alerts if we're not in combined alert mode
+                    # Play alarm sound only if not in combined alert mode
                     if not self.combined_alert_active:
-                        self.parent.ui.update_status(f"ALERT: Hazardous object ({obj_name}) detected in safe area!", "warning")
                         self.parent.ui.play_alarm_sound()
+            else:
+                color = QColor(0, 0, 255)  # Blue for non-hazardous objects
+            
+            # Create appropriate label with inside/outside status
+            label = f"{obj_name}: {'INSIDE' if is_inside else 'OUTSIDE'}"
+            
+            # Store object for drawing later
+            obj_info = (ox1, oy1, ox2, oy2, color, label)
+            if is_inside:
+                objects_inside.append(obj_info)
+            else:
+                objects_outside.append(obj_info)
+        
+        # Draw objects on the frame - inside objects drawn last to appear on top
+        for obj_list in [objects_outside, objects_inside]:
+            for ox1, oy1, ox2, oy2, color, label in obj_list:
+                # Draw bounding box
+                painter.setPen(QPen(color, 2, Qt.SolidLine))
+                painter.setBrush(Qt.NoBrush)
+                painter.drawRect(ox1, oy1, ox2 - ox1, oy2 - oy1)
+                
+                # Draw label background
+                text_rect = painter.boundingRect(ox1, oy1 - 25, ox2 - ox1, 20, Qt.AlignCenter, label)
+                painter.setBrush(QColor(0, 0, 0, 180))  # Semi-transparent black
+                painter.setPen(Qt.NoPen)
+                painter.drawRect(text_rect)
+                
+                # Draw label text
+                painter.setPen(QPen(Qt.white))
+                painter.drawText(text_rect, Qt.AlignCenter, label)
+        
+        # End painting
+        painter.end()
+        
+        # Update the pixmap with our modifications
+        modified_pixmap = QPixmap.fromImage(current_image)
+        camera_view.setPixmap(modified_pixmap)
+        
+        # Count hazardous and non-hazardous objects inside the geofence
+        hazardous_inside = self.hazards_inside_geofence
+        non_hazardous_inside = []
+        
+        # Count non-hazardous objects inside geofence
+        for obj_name, ox1, oy1, ox2, oy2, conf, is_hazardous in objects:
+            center_x = (ox1 + ox2) // 2
+            center_y = (oy1 + oy2) // 2
+            is_inside = self.point_in_polygon(center_x, center_y, self.saved_geofence)
+            
+            if is_inside and not is_hazardous and obj_name not in non_hazardous_inside:
+                non_hazardous_inside.append(obj_name)
+        
+        # Update the status bar with comprehensive info
+        # Get current status bar text
+        current_text = self.parent.ui.statusbar.currentMessage()
+        
+        # Create status message
+        if current_text and "Toddlers in safe zone" in current_text:
+            # Start with existing toddler info
+            updated_text = current_text
+            
+            # Add non-hazardous objects if any
+            if non_hazardous_inside:
+                non_hazardous_list = ", ".join(non_hazardous_inside)
+                updated_text += f" | Safe objects in zone: {len(non_hazardous_inside)} - {non_hazardous_list}"
+            
+            # Add hazardous objects if any
+            if hazardous_inside:
+                hazards_list = ", ".join(hazardous_inside)
+                updated_text += f" | ⚠️ HAZARDS in zone: {len(hazardous_inside)} - {hazards_list} ⚠️"
+            
+            self.parent.ui.statusbar.showMessage(updated_text)
+        else:
+            # Create a new status message from scratch
+            status_parts = []
+            
+            if non_hazardous_inside:
+                non_hazardous_list = ", ".join(non_hazardous_inside)
+                status_parts.append(f"Safe objects in zone: {len(non_hazardous_inside)} - {non_hazardous_list}")
+            
+            if hazardous_inside:
+                hazards_list = ", ".join(hazardous_inside)
+                status_parts.append(f"⚠️ HAZARDS in zone: {len(hazardous_inside)} - {hazards_list} ⚠️")
+            
+            if status_parts:
+                self.parent.ui.statusbar.showMessage(" | ".join(status_parts))
+            else:
+                self.parent.ui.statusbar.showMessage("Geofence active - no objects detected inside")
         
         # After checking all hazards, check combined toddler+hazard status
         self.check_combined_status()
@@ -649,7 +767,8 @@ class GeofenceManager:
                 )
 def integrate_geofence(main_window):
     """Initialize and connect geofence functionality to the main window"""
-    geofence_manager = GeofenceManager(main_window)
+    # Pass the hazardous objects list from the main window
+    geofence_manager = GeofenceManager(main_window, main_window.ui.hazardous_objects)
     
     # Extend update_frame to check geofence conditions
     original_update_frame = main_window.ui.update_frame
@@ -682,9 +801,13 @@ def integrate_geofence(main_window):
                         cls_name = result.names[cls_id]
                         
                         if cls_name not in ['person', 'child', 'toddler'] and conf > 0.50:
-                            other_objects.append((cls_name, x1, y1, x2, y2, conf))
+                            # Determine if this object is hazardous
+                            is_hazardous = any(hazard in cls_name.lower() for hazard in geofence_manager.hazardous_objects)
+                            
+                            # Add object with hazard flag
+                            other_objects.append((cls_name, x1, y1, x2, y2, conf, is_hazardous))
                     
-                    geofence_manager.check_hazards_in_geofence(other_objects)
+                    geofence_manager.check_objects_in_geofence(other_objects)
                 except (IndexError, AttributeError) as e:
                     # Better error handling with detailed message
                     print(f"Error processing objects for geofence: {str(e)}")

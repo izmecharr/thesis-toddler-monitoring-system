@@ -16,6 +16,7 @@ import os
 from aboutPage import AboutDialog
 from helpPage import HelpDialog
 from geofenceIntegration import integrate_geofence
+from config import HAZARDOUS_OBJECTS
 
 class DarkThemeStyle:
     """Style definitions for a modern dark UI"""
@@ -850,16 +851,26 @@ class Ui_MainWindow(object):
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
                             
                         elif conf > 0.50:
+                            # Determine if the object is hazardous
+                            is_hazardous = self.is_hazardous(cls_name)
+                            
                             # Store other detected objects
                             other_objects.append((cls_name, x1, y1, x2, y2, conf))
                             
-                            # Draw bounding box for other objects
-                            cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                            # Draw bounding box with different colors based on hazard status
+                            if is_hazardous:
+                                # Red color for hazardous objects
+                                box_color = (255, 0, 0)  # BGR: Red
+                                label = f"{cls_name}: {conf:.2f}"
+                            else:
+                                # Blue color for non-hazardous objects
+                                box_color = (0, 0, 255)  # BGR: Blue
+                                label = f"{cls_name}: {conf:.2f}"
                             
-                            # Add label with class name and confidence
-                            label = f"{cls_name}: {conf:.2f}"
+                            # Draw the box and label
+                            cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
                             cv2.putText(frame_rgb, label, (x1, y1-10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
                     
                     # Store detected toddlers
                     self._detected_toddlers = toddlers

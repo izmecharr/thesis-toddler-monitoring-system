@@ -2,6 +2,7 @@ __pycache__/
 Thesis_Assets/
 enhanced_yolov8/
 enhanced_yolov8_continued/
+models/
 runs/
 gui/
 *.py[cod]

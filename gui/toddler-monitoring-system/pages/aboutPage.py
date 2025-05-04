@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+#aboutPage.py
 import os
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QIcon

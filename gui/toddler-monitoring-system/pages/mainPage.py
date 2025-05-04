@@ -13,241 +13,24 @@ from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QFont, QIcon
 from PyQt5.QtCore import Qt
 import time
 import os
-from aboutPage import AboutDialog
-from helpPage import HelpDialog
-from geofenceIntegration import integrate_geofence
-from config import HAZARDOUS_OBJECTS
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import Qt, QSize
+import cv2
+import torch
+from ultralytics import YOLO
 
-class DarkThemeStyle:
-    """Style definitions for a modern dark UI"""
-    # Dark theme color palette
-    PRIMARY_COLOR = "#2979FF"        # Vibrant blue
-    SECONDARY_COLOR = "#5C6BC0"      # Indigo
-    WARNING_COLOR = "#FF5252"        # Bright red for warnings
-    SUCCESS_COLOR = "#66BB6A"        # Green for success
-    BACKGROUND_COLOR = "#1E1E2E"     # Dark deep blue/purple background
-    CARD_COLOR = "#2A2A3C"           # Slightly lighter card background
-    PANEL_COLOR = "#252536"          # Medium dark for panels
-    TEXT_PRIMARY = "#FFFFFF"         # White for primary text
-    TEXT_SECONDARY = "#B0B0C0"       # Light gray/lavender for secondary text
-    ACCENT_COLOR = "#BB86FC"         # Purple accent
-    
-    # Border radius for components
-    BORDER_RADIUS = "6px"
-    
-    # Styles
-    BUTTON_STYLE = f"""
-        QPushButton {{
-            background-color: {PRIMARY_COLOR};
-            color: white;
-            border: none;
-            border-radius: {BORDER_RADIUS};
-            padding: 8px 16px;
-            font-weight: bold;
-        }}
-        QPushButton:hover {{
-            background-color: #3D8BFF;
-        }}
-        QPushButton:pressed {{
-            background-color: #1565C0;
-        }}
-        QPushButton:disabled {{
-            background-color: #505064;
-            color: #888896;
-        }}
-    """
-    
-    DANGER_BUTTON_STYLE = f"""
-        QPushButton {{
-            background-color: {WARNING_COLOR};
-            color: white;
-            border: none;
-            border-radius: {BORDER_RADIUS};
-            padding: 8px 16px;
-            font-weight: bold;
-        }}
-        QPushButton:hover {{
-            background-color: #FF4242;
-        }}
-        QPushButton:pressed {{
-            background-color: #D50000;
-        }}
-    """
-    
-    CONFIG_BUTTON_STYLE = f"""
-        QPushButton {{
-            background-color: {SECONDARY_COLOR};
-            color: white;
-            border: none;
-            border-radius: {BORDER_RADIUS};
-            padding: 8px 16px;
-            font-weight: bold;
-        }}
-        QPushButton:hover {{
-            background-color: #6C79CC;
-        }}
-        QPushButton:pressed {{
-            background-color: #4C5AB0;
-        }}
-    """
-    
-    COMBOBOX_STYLE = f"""
-        QComboBox {{
-            border: 1px solid #444458;
-            border-radius: {BORDER_RADIUS};
-            padding: 6px 12px;
-            background-color: {PANEL_COLOR};
-            color: {TEXT_PRIMARY};
-            min-height: 20px;
-        }}
-        QComboBox::drop-down {{
-            subcontrol-origin: padding;
-            subcontrol-position: right center;
-            width: 20px;
-            border-left: none;
-        }}
-        QComboBox QAbstractItemView {{
-            border: 1px solid #444458;
-            border-radius: {BORDER_RADIUS};
-            background-color: {PANEL_COLOR};
-            color: {TEXT_PRIMARY};
-            selection-background-color: {PRIMARY_COLOR};
-            selection-color: white;
-        }}
-    """
-    
-    FRAME_STYLE = f"""
-        QFrame {{
-            background-color: {CARD_COLOR};
-            border-radius: {BORDER_RADIUS};
-            border: none;
-        }}
-    """
-    
-    HEADER_FRAME_STYLE = f"""
-        QFrame {{
-            background-color: {PANEL_COLOR};
-            border-radius: {BORDER_RADIUS};
-            border: none;
-        }}
-    """
-    
-    CONTENT_FRAME_STYLE = f"""
-        QFrame {{
-            background-color: {CARD_COLOR};
-            border-radius: {BORDER_RADIUS};
-            border: none;
-        }}
-    """
-    
-    CAMERA_VIEW_STYLE = f"""
-        QLabel {{
-            background-color: #121218;
-            border-radius: {BORDER_RADIUS};
-            border: 2px solid #333344;
-            color: {TEXT_SECONDARY};
-        }}
-    """
-    
-    STATUS_NORMAL = f"""
-        QLabel {{
-            color: {TEXT_PRIMARY};
-            background-color: {PANEL_COLOR};
-            border-radius: {BORDER_RADIUS};
-            padding: 5px;
-            border: 1px solid #444458;
-        }}
-    """
-    
-    STATUS_WARNING = f"""
-        QLabel {{
-            color: white;
-            background-color: {WARNING_COLOR};
-            border-radius: {BORDER_RADIUS};
-            padding: 5px;
-            font-weight: bold;
-        }}
-    """
-    
-    STATUS_SUCCESS = f"""
-        QLabel {{
-            color: white;
-            background-color: {SUCCESS_COLOR};
-            border-radius: {BORDER_RADIUS};
-            padding: 5px;
-        }}
-    """
-    
-    MAIN_STYLE = f"""
-        QMainWindow {{
-            background-color: {BACKGROUND_COLOR};
-        }}
-        QWidget {{
-            background-color: {BACKGROUND_COLOR};
-        }}
-    """
-    
-    DIALOG_STYLE = f"""
-        QDialog {{
-            background-color: {BACKGROUND_COLOR};
-        }}
-        QLabel {{
-            color: {TEXT_PRIMARY};
-        }}
-        QDoubleSpinBox {{
-            border: 1px solid #444458;
-            border-radius: {BORDER_RADIUS};
-            padding: 5px;
-            background-color: {PANEL_COLOR};
-            color: {TEXT_PRIMARY};
-        }}
-        QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
-            background-color: {PRIMARY_COLOR};
-            border-radius: 3px;
-        }}
-        QDialogButtonBox QPushButton {{
-            background-color: {PRIMARY_COLOR};
-            color: white;
-            border: none;
-            border-radius: {BORDER_RADIUS};
-            padding: 8px 16px;
-            font-weight: bold;
-        }}
-        QDialogButtonBox QPushButton:hover {{
-            background-color: #3D8BFF;
-        }}
-    """
-    
-    MENU_STYLE = f"""
-        QMenuBar {{
-            background-color: {PANEL_COLOR};
-            color: {TEXT_PRIMARY};
-            border-bottom: 1px solid #3A3A4C;
-            padding: 2px;
-        }}
-        QMenuBar::item {{
-            background: transparent;
-            padding: 5px 10px;
-        }}
-        QMenuBar::item:selected {{
-            background: {PRIMARY_COLOR};
-            color: white;
-        }}
-        QMenu {{
-            background-color: {PANEL_COLOR};
-            color: {TEXT_PRIMARY};
-            border: 1px solid #444458;
-            border-radius: {BORDER_RADIUS};
-        }}
-        QMenu::item {{
-            padding: 5px 30px 5px 20px;
-            border: 1px solid transparent;
-        }}
-        QMenu::item:selected {{
-            background-color: {PRIMARY_COLOR};
-            color: white;
-        }}
-    """
+# Import from other pages
+from .aboutPage import AboutDialog
+from .helpPage import HelpDialog
+from .mobileHelpPage import show_mobile_help
+from .styles import DarkThemeStyle
+
+# Import from integration
+from integration import (
+    integrate_geofence,
+    integrate_mobile_app,
+    HAZARDOUS_OBJECTS
+)
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         # Set window icon and title bar style
@@ -542,7 +325,7 @@ class Ui_MainWindow(object):
         try:
             self.update_status("Loading YOLO model...", "normal")
             # Update this path to your model path
-            self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddlerMonitoringSys\\yolo11n.pt')
+            self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\enhanced_yolov8\\enhanced_n_3\\weights\\best.pt')
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\runs\\detect\\my_custom_model5\\weights\\best.pt')
             
@@ -558,9 +341,8 @@ class Ui_MainWindow(object):
         self.minkowski_p = 2  # Minkowski distance parameter (1=Manhattan, 2=Euclidean)
         
         # Define hazardous objects list
-        self.hazardous_objects = [
-            'coin', 'drink', 'fork', 'hammer', 'screwdriver', 'stapler', 'sharp-item', 'cell phone'
-        ]
+        # Replace the direct definition with the imported list
+        self.hazardous_objects = HAZARDOUS_OBJECTS.copy()
         
         # Connect buttons to functions
         self.openCamButton.clicked.connect(self.start_camera)
@@ -795,7 +577,7 @@ class Ui_MainWindow(object):
         return (self.known_width * self.focal_length) / pixel_width
 
     def update_frame(self):
-        """Process each frame with YOLO object detection"""
+        """Process each frame with YOLO object detection - Updated to send alerts to mobile"""
         ret, frame = self.camera.read()
         if ret:
             # Convert frame to RGB for YOLO processing
@@ -836,6 +618,26 @@ class Ui_MainWindow(object):
                         cls_id = int(box.cls[0].cpu().numpy())
                         cls_name = result.names[cls_id]
                         
+                        # Calculate center point for geofence checking
+                        center_x = (x1 + x2) // 2
+                        center_y = (y1 + y2) // 2
+                        
+                        # Check if object is inside any geofence
+                        geofence_status = ""
+                        geofence_color_suffix = ""
+                        
+                        # Check if geofence manager exists and has active geofences
+                        if hasattr(self.main_window, 'geofence_integration'):
+                            geofence_manager = self.main_window.geofence_integration
+                            if hasattr(geofence_manager, 'saved_geofence') and geofence_manager.saved_geofence:
+                                # Check if point is inside the active geofence
+                                if geofence_manager.point_in_polygon(center_x, center_y, geofence_manager.saved_geofence):
+                                    geofence_status = " [Inside]"
+                                    geofence_color_suffix = " ✓"  # Add checkmark for objects inside
+                                else:
+                                    geofence_status = " [Outside]"
+                                    geofence_color_suffix = " ✗"  # Add cross for objects outside
+                        
                         # Check if detection is a toddler/child/person with good confidence
                         if cls_name in ['person', 'child', 'toddler'] and conf > 0.50:
                             # Store toddler detection
@@ -845,8 +647,8 @@ class Ui_MainWindow(object):
                             # Draw bounding box for toddler
                             cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), (0, 255, 0), 2)
                             
-                            # Add label with confidence
-                            label = f"Toddler: {conf:.2f}"
+                            # Add label with confidence and geofence status
+                            label = f"{geofence_status} {cls_name}: {conf:.2f}"
                             cv2.putText(frame_rgb, label, (x1, y1-10), 
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
                             
@@ -861,11 +663,11 @@ class Ui_MainWindow(object):
                             if is_hazardous:
                                 # Red color for hazardous objects
                                 box_color = (255, 0, 0)  # BGR: Red
-                                label = f"{cls_name}: {conf:.2f}"
+                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
                             else:
                                 # Blue color for non-hazardous objects
                                 box_color = (0, 0, 255)  # BGR: Blue
-                                label = f"{cls_name}: {conf:.2f}"
+                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
                             
                             # Draw the box and label
                             cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
@@ -921,19 +723,37 @@ class Ui_MainWindow(object):
                                     estimated_distance < self.distance_threshold and
                                     self.is_hazardous(obj_name)):  # Add this condition
                                     # Update status and send notification
-                                    self.update_status(f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f}m)", "warning")
-                                    # Notification would go here if you have a notification system
+                                    alert_message = f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f}m)"
+                                    self.update_status(alert_message, "warning")
+                                    
+                                    # Send alert to mobile app
+                                    if hasattr(self.main_window, 'send_mobile_alert'):
+                                        self.main_window.send_mobile_alert(
+                                            "Hazard Proximity", 
+                                            f"Warning: Toddler is too close to {obj_name}!"
+                                        )
+                                    
                                     self.play_alarm_sound()
                     
-                    # Show count of detected objects and hazards
-                    detected_hazards = [obj_name for obj_name, _, _, _, _, _ in other_objects 
-                                    if self.is_hazardous(obj_name)]
-                    status_text = f"Detected: {len(toddlers)} toddlers, {len(other_objects)} other objects"
+                    hazardous_objects = []
+                    non_hazardous_objects = []
+
+                    for obj_name, _, _, _, _, _ in other_objects:
+                        if self.is_hazardous(obj_name):
+                            hazardous_objects.append(obj_name)
+                        else:
+                            non_hazardous_objects.append(obj_name)
+
+                    # Create status bar message with separate counts
+                    status_text = f"Update: Toddler(s): {len(toddlers)} | Non-hazardous objects: {len(non_hazardous_objects)} | Hazardous Objects: "
 
                     # Add hazards if any detected
-                    if detected_hazards:
-                        hazards_text = ", ".join(detected_hazards)
-                        status_text += f" | Hazards: {hazards_text}"
+                    if hazardous_objects:
+                        hazards_text = ", ".join(hazardous_objects)
+                        status_text += f"{len(hazardous_objects)} [{hazards_text}]"
+                    else:
+                        status_text += "0"
+
                     self.statusbar.showMessage(status_text)
                 else:
                     # No detections
@@ -960,8 +780,6 @@ class Ui_MainWindow(object):
             scaled_pixmap = pixmap.scaled(scaled_width, scaled_height, 
                                         QtCore.Qt.KeepAspectRatio, 
                                         QtCore.Qt.SmoothTransformation)
-            
-            self.cameraView.setPixmap(scaled_pixmap)
             
     def stop_camera(self):
         self.timer.stop()
@@ -1004,6 +822,40 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         self.ui.actionFAQs.triggered.connect(self.show_faqs)
         self.ui.actionAbout.triggered.connect(self.show_about_dialog)
         
+        # Initialize mobile app integration
+        integrate_mobile_app(self)
+        
+        # Add Mobile Connect menu action
+        self.add_mobile_connection_menu()
+        
+        # Add method to send alerts to mobile
+        self.send_mobile_alert = self.handle_mobile_alert
+    
+    def add_mobile_connection_menu(self):
+        """Add menu item for mobile connection"""
+        if hasattr(self, 'ui') and hasattr(self.ui, 'menubar'):
+            # Create Mobile menu
+            mobile_menu = self.ui.menubar.addMenu("Mobile")
+            
+            # Add Connect Mobile App action
+            connect_action = QtWidgets.QAction("Connect Mobile App", self)
+            connect_action.triggered.connect(self.show_mobile_connection_dialog)
+            mobile_menu.addAction(connect_action)
+            
+            # Add separator
+            mobile_menu.addSeparator()
+            
+            # Add Mobile Help action  
+            mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
+            mobile_help_action.triggered.connect(show_mobile_help)
+            mobile_menu.addAction(mobile_help_action)
+
+    def handle_mobile_alert(self, alert_type, message):
+        """Send alert to mobile devices"""
+        if hasattr(self, 'mobile_server_manager'):
+            print(f"Sending alert to mobile: {alert_type} - {message}")
+            self.mobile_server_manager.send_alert(alert_type, message)
+    
     def on_resize(self, event):
         """Handle window resize events"""
         # Make sure camera view is updated if there's a pixmap

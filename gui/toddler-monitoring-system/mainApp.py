@@ -1,10 +1,33 @@
 # -*- coding: utf-8 -*-
-
+#mainApp.py
 import sys
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import Qt, QCoreApplication
 import os
+
+import os
+import sys
+import json
+
+# Third-party imports (always second)
+from PyQt5 import QtWidgets
+from PyQt5.QtCore import Qt, QCoreApplication
+import cv2
+import numpy as np
+from pages.styles import DarkThemeStyle
+# Local imports (always last)
+from pages import (
+    DarkThemeStyle,
+    ToddlerMonitoringSystem,
+    show_mobile_help,
+    DarkThemeStyle
+)
+from integration import (
+    integrate_mobile_app,
+    integrate_geofence,
+    HAZARDOUS_OBJECTS
+)
 
 def setup_qt_plugins():
     """Make sure PyQt5 plugins are detected in bundled applications"""
@@ -16,17 +39,6 @@ def setup_qt_plugins():
 
 # Call this before creating your QApplication
 setup_qt_plugins()
-
-# At the top of your mainApp.py file
-
-sys.path.append(r'C:\\Users\\izzze\\OneDrive\\Documents\\Github\\gui')
-from mainPage import ToddlerMonitoringSystem, DarkThemeStyle
-
-# Import the mobile integration components
-from appIntegration import integrate_mobile_app
-
-# Import the geofence integration
-from geofenceIntegration import integrate_geofence
 
 def main():
     """
@@ -123,16 +135,6 @@ def main():
 
         # Integrate mobile app functionality
         mobile_server = integrate_mobile_app(main_window)
-        
-        # Add menu item to help menu for mobile app connection if not already added
-        if hasattr(main_window, 'ui') and hasattr(main_window.ui, 'menuHelp'):
-            # Add separator before mobile options
-            main_window.ui.menuHelp.addSeparator()
-            
-            # Add Mobile App Help action
-            mobile_help_action = QtWidgets.QAction("Mobile App Guide", main_window)
-            mobile_help_action.triggered.connect(show_mobile_help)
-            main_window.ui.menuHelp.addAction(mobile_help_action)
         
         # Show the main window
         main_window.show()

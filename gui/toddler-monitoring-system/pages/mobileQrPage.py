@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+#mobileQrPage.py
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QIcon
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QHBoxLayout

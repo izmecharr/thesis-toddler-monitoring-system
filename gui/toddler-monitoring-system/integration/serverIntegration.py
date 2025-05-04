@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+#serverIntegration.py
 import socket
 import threading
 import json
@@ -18,6 +18,9 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 import time
 import random
 
+
+# Import from same package
+from .appIntegration import integrate_mobile_app
 
 class WebServerThread(threading.Thread):
     """

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+#helpPage.py
 
 import os
 from PyQt5 import QtCore, QtGui, QtWidgets

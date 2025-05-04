@@ -18,6 +18,7 @@ def analyze_model_structure(model):
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")
     
+<<<<<<< HEAD
     # Check C2f indices and expected hook positions
     if hasattr(model, 'c2f_indices'):
         print(f"\nFound C2f blocks at indices: {model.c2f_indices}")
@@ -37,9 +38,19 @@ def analyze_model_structure(model):
             print(f"  Layer {idx}: {hook_type}")
     
     # Check custom modules
+=======
+    # Look for custom backbone enhancements
+    if hasattr(model, 'backbone_enhancements'):
+        print("\nBackbone Enhancements:")
+        for pos_name, details in model.backbone_enhancements.items():
+            print(f"  - {pos_name}: {details['type']} after {details['position']} ({details['channels']} channels)")
+    
+    # Look for our custom modules
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
     if hasattr(model, 'custom_modules'):
         print("\nCustom modules found:")
         for name, module in model.custom_modules.items():
+<<<<<<< HEAD
             param_count = sum(p.numel() for p in module.parameters())
             print(f"  {name}: {type(module).__name__}, {param_count:,} parameters")
     
@@ -126,9 +137,14 @@ def test_forward_pass_with_hooks(model):
                 print(f"  Element {i} type: {type(out)}")
     elif hasattr(output, 'shape'):
         print(f"\nFinal output shape: {output.shape}")
+=======
+            module_type = type(module).__name__
+            print(f"  - {name}: {module_type}")
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
     else:
         print(f"\nOutput type: {type(output)}")
     
+<<<<<<< HEAD
     return activations
 
 def test_training_mode(model):
@@ -148,6 +164,10 @@ def test_training_mode(model):
     }
     
     print("Testing training forward pass...")
+=======
+    # Test forward pass
+    print("\nTesting forward pass with dummy input...")
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
     try:
         output = model(batch)
         
@@ -192,8 +212,64 @@ def compare_with_standard(enhanced_model):
             enhanced_output = enhanced_model(dummy_input)
         enhanced_time = time.time() - start_time
         
+<<<<<<< HEAD
         # Standard model timing  
         start_time = time.time()
+=======
+        if isinstance(output, torch.Tensor):
+            print(f"Forward pass successful! Output shape: {output.shape}")
+        else:
+            print(f"Forward pass successful! Output type: {type(output)}")
+            if hasattr(output, 'shape'):
+                print(f"Output shape: {output.shape}")
+        
+        print(f"Inference time: {(end_time - start_time)*1000:.2f} ms")
+    except Exception as e:
+        print(f"Error during forward pass: {e}")
+        import traceback
+        traceback.print_exc()
+
+def verify_backbone_enhancements(model):
+    """Verify that backbone enhancements are correctly placed."""
+    print("\n=== Verifying Backbone Enhancements ===")
+    
+    # Check that we have the expected number of enhancements
+    if hasattr(model, 'backbone_enhancements'):
+        num_enhancements = len(model.backbone_enhancements)
+        print(f"Found {num_enhancements} backbone enhancements")
+        
+        # Verify specific enhancements
+        expected_enhancements = [
+            ("c2f_1", "ResidualC2f"),
+            ("c2f_2", "SmallObjectEnhance"), 
+            ("c2f_3", "ResidualC2f")
+        ]
+        
+        found_count = 0
+        for expected_name, expected_type in expected_enhancements:
+            found = False
+            for actual_name, details in model.backbone_enhancements.items():
+                if expected_name == actual_name and details['type'] == expected_type:
+                    print(f"✓ Found {expected_type} at {actual_name} as expected")
+                    found = True
+                    found_count += 1
+                    break
+            if not found:
+                print(f"✗ Missing {expected_type} at {expected_name}")
+        
+        if found_count == len(expected_enhancements):
+            print("All expected enhancements were found!")
+        else:
+            print(f"Only found {found_count}/{len(expected_enhancements)} expected enhancements")
+    else:
+        print("No backbone_enhancements attribute found in model")
+
+def test_detection(model):
+    """Test if the model can actually perform detection."""
+    try:
+        print("\nTesting detection capabilities...")
+        dummy_input = torch.randn(1, 3, 640, 640)
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
         with torch.no_grad():
             standard_model.eval()
             standard_output = standard_model(dummy_input)
@@ -243,7 +319,15 @@ def test_save_load(model):
             loaded_model.eval()
             output = loaded_model(dummy_input)
         
+<<<<<<< HEAD
         print("✓ Save/Load test successful")
+=======
+        print("Forward pass of loaded model successful!")
+        
+        # Verify backbone enhancements after loading
+        verify_backbone_enhancements(loaded_model)
+        
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
         return loaded_model
         
     except Exception as e:
@@ -259,8 +343,16 @@ def main():
     # Analyze model structure
     analyze_model_structure(model)
     
+<<<<<<< HEAD
     # Trace backbone enhancements
     trace_backbone_enhancements(model)
+=======
+    # Verify backbone enhancements
+    verify_backbone_enhancements(model)
+    
+    # Test detection capabilities
+    test_detection(model)
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
     
     # Test forward pass with hooks
     activations = test_forward_pass_with_hooks(model)

@@ -19,6 +19,7 @@ def analyze_model_structure(model):
     print(f"Total parameters: {total_params:,}")
     
 <<<<<<< HEAD
+<<<<<<< HEAD
     # Check C2f indices and expected hook positions
     if hasattr(model, 'c2f_indices'):
         print(f"\nFound C2f blocks at indices: {model.c2f_indices}")
@@ -39,6 +40,8 @@ def analyze_model_structure(model):
     
     # Check custom modules
 =======
+=======
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
     # Look for custom backbone enhancements
     if hasattr(model, 'backbone_enhancements'):
         print("\nBackbone Enhancements:")
@@ -50,6 +53,7 @@ def analyze_model_structure(model):
     if hasattr(model, 'custom_modules'):
         print("\nCustom modules found:")
         for name, module in model.custom_modules.items():
+<<<<<<< HEAD
 <<<<<<< HEAD
             param_count = sum(p.numel() for p in module.parameters())
             print(f"  {name}: {type(module).__name__}, {param_count:,} parameters")
@@ -141,9 +145,14 @@ def test_forward_pass_with_hooks(model):
             module_type = type(module).__name__
             print(f"  - {name}: {module_type}")
 >>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
+=======
+            module_type = type(module).__name__
+            print(f"  - {name}: {module_type}")
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
     else:
         print(f"\nOutput type: {type(output)}")
     
+<<<<<<< HEAD
 <<<<<<< HEAD
     return activations
 
@@ -165,6 +174,8 @@ def test_training_mode(model):
     
     print("Testing training forward pass...")
 =======
+=======
+>>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
     # Test forward pass
     print("\nTesting forward pass with dummy input...")
 >>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
@@ -347,6 +358,9 @@ def main():
     # Trace backbone enhancements
     trace_backbone_enhancements(model)
 =======
+    # Verify backbone enhancements
+    verify_backbone_enhancements(model)
+    
     # Verify backbone enhancements
     verify_backbone_enhancements(model)
     

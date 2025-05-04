@@ -153,7 +153,7 @@ def train_enhanced_yolov8(
         
         # Improved hyperparameters
         "lr0": learning_rate,          # Initial learning rate
-        "lrf": 0.01,                   # Final learning rate (lr0 * lrf)
+        "lrf": 0.0001,                   # Final learning rate (lr0 * lrf)
         "momentum": 0.937,             # SGD momentum
         "weight_decay": weight_decay,  # Weight decay
         "warmup_epochs": warmup_epochs,# Warmup epochs
@@ -365,12 +365,9 @@ def continue_training(
     
     # Small object specific fine-tuning
     training_args.update({
-        "max_det": 300,                # Increase maximum detections
-        "nms_time_threshold": 50,      # Time threshold for NMS
-        "iou": 0.6,                    # IoU threshold for evaluation
-        "cls_pw": 1.0,                 # cls BCELoss positive_weight
-        "obj_pw": 1.0,                 # obj BCELoss positive_weight
-        "iou_t": 0.6                   # IoU training threshold
+    "max_det": 300,                # Increase maximum detections
+    "iou": 0.6,                    # IoU threshold for evaluation
+    "kobj": 1.0                    # Object loss gain
     })
     
     # Start training

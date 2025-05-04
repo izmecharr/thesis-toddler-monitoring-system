@@ -10,25 +10,20 @@ def visualize_model_structure(model):
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")
     
+    # Look for custom backbone enhancements
+    if hasattr(model, 'backbone_enhancements'):
+        print("\nBackbone Enhancements:")
+        for pos_name, details in model.backbone_enhancements.items():
+            print(f"  - {pos_name}: {details['type']} after {details['position']} ({details['channels']} channels)")
+    
     # Look for our custom modules
     if hasattr(model, 'custom_modules'):
         print("\nCustom modules:")
         for name, module in model.custom_modules.items():
-            print(f"  - {name}: {type(module).__name__}")
+            module_type = type(module).__name__
+            print(f"  - {name}: {module_type}")
     else:
         print("\nNo custom modules found")
-    
-    # Print insertion points if available
-    if hasattr(model, 'insertion_points'):
-        print("\nInsertion points:")
-        for point in model.insertion_points:
-            print(f"  - {point}")
-    
-    # Check model attributes
-    if hasattr(model, 'channel_sizes'):
-        print("\nChannel sizes:")
-        for layer, channels in model.channel_sizes.items():
-            print(f"  - {layer}: {channels}")
     
     # Test forward pass
     print("\nTesting forward pass with dummy input...")
@@ -51,6 +46,41 @@ def visualize_model_structure(model):
         print(f"Error during forward pass: {e}")
         import traceback
         traceback.print_exc()
+
+def verify_backbone_enhancements(model):
+    """Verify that backbone enhancements are correctly placed."""
+    print("\n=== Verifying Backbone Enhancements ===")
+    
+    # Check that we have the expected number of enhancements
+    if hasattr(model, 'backbone_enhancements'):
+        num_enhancements = len(model.backbone_enhancements)
+        print(f"Found {num_enhancements} backbone enhancements")
+        
+        # Verify specific enhancements
+        expected_enhancements = [
+            ("c2f_1", "ResidualC2f"),
+            ("c2f_2", "SmallObjectEnhance"), 
+            ("c2f_3", "ResidualC2f")
+        ]
+        
+        found_count = 0
+        for expected_name, expected_type in expected_enhancements:
+            found = False
+            for actual_name, details in model.backbone_enhancements.items():
+                if expected_name == actual_name and details['type'] == expected_type:
+                    print(f"✓ Found {expected_type} at {actual_name} as expected")
+                    found = True
+                    found_count += 1
+                    break
+            if not found:
+                print(f"✗ Missing {expected_type} at {expected_name}")
+        
+        if found_count == len(expected_enhancements):
+            print("All expected enhancements were found!")
+        else:
+            print(f"Only found {found_count}/{len(expected_enhancements)} expected enhancements")
+    else:
+        print("No backbone_enhancements attribute found in model")
 
 def test_detection(model):
     """Test if the model can actually perform detection."""
@@ -105,13 +135,8 @@ def test_save_load(model):
         
         print("Forward pass of loaded model successful!")
         
-        # Check custom modules in loaded model
-        if hasattr(loaded_model, 'custom_modules'):
-            print("\nCustom modules in loaded model:")
-            for name, module in loaded_model.custom_modules.items():
-                print(f"  - {name}: {type(module).__name__}")
-        else:
-            print("\nNo custom modules found in loaded model")
+        # Verify backbone enhancements after loading
+        verify_backbone_enhancements(loaded_model)
         
         return loaded_model
     except Exception as e:
@@ -126,6 +151,9 @@ def main():
     
     # Visualize model structure
     visualize_model_structure(model)
+    
+    # Verify backbone enhancements
+    verify_backbone_enhancements(model)
     
     # Test detection capabilities
     test_detection(model)

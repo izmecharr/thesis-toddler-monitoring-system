@@ -700,8 +700,6 @@ class Ui_MainWindow(object):
                                 # Estimate real-world distance if possible
                                 if self.focal_length is None and t_width > 0:
                                     # Calculate focal length if not already set
-                                    # Assuming the toddler is at a known distance for calibration (e.g., 1 meter)
-                                    # focal_length = (pixel_width * known_distance) / known_width
                                     self.focal_length = (t_width * 1.0) / self.known_width
                                     self.update_status(f"Calibrated focal length: {self.focal_length:.2f}", "normal")
                                 
@@ -721,11 +719,20 @@ class Ui_MainWindow(object):
                                         cv2.putText(frame_rgb, dist_label, (mid_x, mid_y), 
                                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
                                 
-                                # Check if object is too close to toddler
-                                # MODIFIED: Only show alert for hazardous objects
+                                # MODIFIED: Check object's geofence status before alerting
+                                object_inside_geofence = False
+                                if hasattr(self.main_window, 'geofence_integration'):
+                                    geofence_manager = self.main_window.geofence_integration
+                                    if hasattr(geofence_manager, 'saved_geofence') and geofence_manager.saved_geofence:
+                                        if geofence_manager.point_in_polygon(obj_center[0], obj_center[1], geofence_manager.saved_geofence):
+                                            object_inside_geofence = True
+                                
+                                # Check if object is too close to toddler AND inside geofence
                                 if (estimated_distance is not None and 
                                     estimated_distance < self.distance_threshold and
-                                    self.is_hazardous(obj_name)):  # Add this condition
+                                    self.is_hazardous(obj_name) and
+                                    object_inside_geofence):  # Added geofence condition
+                                    
                                     # Update status and send notification
                                     self.update_status(f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f}m)", "warning")
                                     # Notification would go here if you have a notification system

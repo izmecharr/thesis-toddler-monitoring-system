@@ -172,31 +172,38 @@ class HelpDialog(QDialog):
             <h1>Frequently Asked Questions</h1>
             
             <p class="question">Q: What is the Toddler Monitoring System?</p>
-            <p class="answer">The Toddler Monitoring System is a safety-focused application that uses advanced computer vision technology to detect and monitor toddlers in real-time. It alerts you when potentially dangerous objects come too close to a toddler, helping prevent accidents before they happen.</p>
+            <p class="answer">The Toddler Monitoring System is a desktop application that uses YOLOv8 with increased confidence score to detect and monitor toddlers in real-time. It alerts you when potentially dangerous objects come too close to a toddler, helping prevent accidents before they happen.</p>
+            
+            <p class="question">Q: How does the system differentiate between toddlers and adults?</p>
+            <p class="answer">The system uses YOLOv8 with increased confidence score for object detection, which can detect both 'toddler' and 'person' classes. Toddlers are shown with green borders when inside safe zones, while adults are shown with purple borders.</p>
+            
+            <p class="question">Q: What are geofences and how do they work?</p>
+            <p class="answer">Geofences are virtual boundaries you can create on the camera view to designate safe zones. You can create a safe zone by clicking "Add Geofence" and placing 4 points to form a polygon. The system will alert if toddlers leave this zone.</p>
             
             <p class="question">Q: How accurate is the toddler detection?</p>
-            <p class="answer">The system uses YOLO (You Only Look Once) object detection technology, which is highly accurate for detecting people, including toddlers. In good lighting conditions with a clear view, detection accuracy is typically above 90%. The system works best when the toddler is fully visible and not obscured by objects.</p>
+            <p class="answer">The system uses YOLOv8 with increased confidence score from a customized dataset, which is highly accurate for detecting toddlers and hazards. In good lighting conditions with a clear view, detection accuracy is typically above 90%.</p>
             
-            <p class="question">Q: What cameras work with this system?</p>
-            <p class="answer">The system is compatible with most USB webcams, IP cameras, and the built-in camera on your computer. For best results, we recommend using a camera with at least 720p resolution and good low-light performance if you plan to use it in dimly lit areas.</p>
+            <p class="question">Q: What objects can the system detect as potentially dangerous?</p>
+            <p class="answer">The system can detect common household hazards including coins, drinks, forks, hammers, screwdrivers, staplers, and sharp items. You can customize this list in the configuration settings.</p>
+            
+            <p class="question">Q: Can I adjust the distance threshold for alerts?</p>
+            <p class="answer">Yes, you can customize the distance threshold in the Configuration dialog. Simply click on the "Configure" button and adjust the "Distance threshold" value. You can also choose between Manhattan (p=1) or Euclidean (p=2) distance metrics.</p>
+            
+            <p class="question">Q: How do the visual alerts work?</p>
+            <p class="answer">The system uses color-coded alerts:
+            <ul>
+                <li>Green: Toddlers inside safe zones</li>
+                <li>Red: Hazardous objects inside geofence</li>
+                <li>Orange: Toddlers outside safe zones</li>
+                <li>Purple: Adults/Person (light purple for inside geofence, dark purple for outside)</li>
+                <li>Blue: Non-hazardous objects</li>
+            </ul></p>
             
             <p class="question">Q: Does the system record video?</p>
             <p class="answer">No, the current version processes video feeds in real-time but does not record or store video content. This helps protect your family's privacy.</p>
             
-            <p class="question">Q: What objects can the system detect as potentially dangerous?</p>
-            <p class="answer">The system can detect common household objects like coins, drink, fork, hammer, screwdriver, stapler, and sharp items hazards. It uses distance measurements to determine if these objects are too close to a toddler.</p>
-            
-            <p class="question">Q: Can I adjust the distance threshold for alerts?</p>
-            <p class="answer">Yes, you can customize the distance threshold in the Configuration dialog. Simply click on the "Configure" button in the main interface and adjust the "Distance threshold" value.</p>
-            
-            <p class="question">Q: Does the system work in low light or at night?</p>
-            <p class="answer">The system's performance depends on your camera's capabilities. For reliable detection in low light, consider using a camera with infrared or low-light capabilities.</p>
-            
-            <p class="question">Q: How do I get notifications when I'm away from the computer?</p>
-            <p class="answer">The current version provides on-screen visual alerts and sound notifications. Future versions will include mobile notifications and integration with smart home systems.</p>
-            
-            <p class="question">Q: Can the system monitor multiple toddlers simultaneously?</p>
-            <p class="answer">Yes, the system can detect and monitor multiple toddlers at the same time and will generate alerts for any toddler in potential danger.</p>
+            <p class="question">Q: What cameras work with this system?</p>
+            <p class="answer">The system is compatible with most USB webcams, IP cameras, and the built-in camera on your computer. For best results, we recommend using a camera with at least 720p resolution.</p>
             
             <p class="question">Q: What are the system requirements?</p>
             <p class="answer">
@@ -206,7 +213,7 @@ class HelpDialog(QDialog):
                 <li>4GB RAM (8GB recommended)</li>
                 <li>Dual-core processor</li>
                 <li>Webcam or compatible camera</li>
-                <li>Python 3.8 or higher with required libraries (PyQt5, OpenCV, YOLO)</li>
+                <li>Python 3.8 or higher with required libraries</li>
             </ul>
             For optimal performance, a computer with a dedicated GPU is recommended.
             </p>
@@ -267,6 +274,7 @@ class HelpDialog(QDialog):
             <ol>
                 <li><a href="#getting-started">Getting Started</a></li>
                 <li><a href="#camera-setup">Camera Setup</a></li>
+                <li><a href="#geofence">Creating Safe Zones with Geofence</a></li>
                 <li><a href="#configuration">System Configuration</a></li>
                 <li><a href="#monitoring">Monitoring and Alerts</a></li>
                 <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -280,6 +288,7 @@ class HelpDialog(QDialog):
             <ul>
                 <li><strong>Camera View:</strong> The main central area displays the live feed from your camera.</li>
                 <li><strong>Control Panel:</strong> Located at the top, this contains camera selection, open/close buttons, and configuration.</li>
+                <li><strong>Geofence Panel:</strong> Below the control panel, shows geofence status and controls.</li>
                 <li><strong>Status Bar:</strong> Below the camera view, shows the current status and detection counts.</li>
             </ul>
             
@@ -304,58 +313,84 @@ class HelpDialog(QDialog):
             
             <p class="tip"><strong>Tip:</strong> The system will automatically calibrate distance measurements based on detected toddlers. For best results, position your camera so the toddler is fully visible in the frame.</p>
             
-            <h2 id="configuration">3. System Configuration</h2>
+            <h2 id="geofence">3. Creating Safe Zones with Geofence</h2>
+            <p>Geofences allow you to define safe areas for toddlers within the camera view.</p>
+            
+            <h3>Creating a Geofence:</h3>
+            <ol>
+                <li>Click the "Add Geofence" button in the geofence panel.</li>
+                <li>Click on the camera view to place 3-4 points that will form the boundary of your safe zone.</li>
+                <li>Click "Save" to activate the geofence.</li>
+                <li>The safe zone area will be highlighted in blue.</li>
+            </ol>
+            
+            <h3>Managing Geofences:</h3>
+            <ul>
+                <li><strong>Edit:</strong> Click "Edit Geofence" to modify existing boundaries.</li>
+                <li><strong>Clear:</strong> Click "Clear" to remove the current geofence.</li>
+                <li><strong>Cancel:</strong> Click "Cancel" to discard unsaved changes.</li>
+            </ul>
+            
+            <p class="warning"><strong>Warning:</strong> Toddlers outside the geofence will trigger visual and audio alerts.</p>
+            
+            <h2 id="configuration">4. System Configuration</h2>
             <p>The system can be customized to meet your specific needs:</p>
             
             <h3>Accessing Configuration:</h3>
             <p>Click the "Configure" button in the control panel to open the configuration dialog.</p>
             
-            <# Find the section in setup_manual_tab where the system configuration is described
-# Around line 263 in the original code, in the manual_html variable
-# Replace the existing Available Settings with this expanded content:
-
-        <h3>Available Settings:</h3>
-        <ul>
-            <li><strong>Distance Threshold:</strong> Set how close (in meters) an object must be to a toddler before triggering an alert.
-                <p>This is simply how close (in meters) an object needs to be to a toddler before the system sounds an alarm.
-                For example:</p>
-                <ul>
-                    <li>If set to 1.5 meters: If a hot kettle is detected 1.2 meters from the toddler, an alert will sound because it's closer than the 1.5-meter threshold.</li>
-                    <li>If set to 0.5 meters: The same kettle at 1.2 meters wouldn't trigger an alert, only when it gets much closer.</li>
-                </ul>
-            </li>
-            <li><strong>Minkowski p value:</strong> This determines HOW the system measures distance between objects:
-                <ul>
-                    <li>When p=1 (Manhattan): The system measures distance as if you can only move in straight lines horizontally and vertically (like a taxi driving on a grid of city blocks)</li>
-                    <li>When p=2 (Euclidean): The system measures distance as a straight line between two points (like how a bird would fly)</li>
-                </ul>
-            </li>
-            <li><strong>Known Width:</strong> The average width of a toddler's shoulders in meters. Used for distance calculations.</li>
-        </ul>
-
-        <h3>Practical Examples:</h3>
-        <ol>
-            <li><strong>Kitchen monitoring scenario:</strong>
-                <ul>
-                    <li>With p=1 (Manhattan): Good for structured environments like kitchens where danger might come from specific directions along countertops. It might detect a toddler approaching a stove from the side earlier.</li>
-                    <li>With p=2 (Euclidean): Better for open spaces where threats can come from any angle.</li>
-                </ul>
-            </li>
-            <li><strong>Swimming pool monitoring:</strong>
-                <ul>
-                    <li>Higher distance threshold (2-3 meters): Gives early warnings when a toddler approaches a pool</li>
-                    <li>p=2 (Euclidean): Since danger can come from any direction around the pool</li>
-                </ul>
-            </li>
-            <li><strong>Living room with fireplace:</strong>
-                <ul>
-                    <li>Medium threshold (1-1.5 meters)</li>
-                    <li>Either distance metric could work, but p=1 might be better if the fireplace is against a wall (creating a more grid-like danger zone)</li>
-                </ul>
-            </li>
-        </ol>
-
-        <p class="warning"><strong>Warning:</strong> Setting the distance threshold too low may result in missed alerts, while setting it too high may cause frequent false alarms.</p>
+            <h3>General Settings Tab:</h3>
+            <ul>
+                <li><strong>Distance Threshold:</strong> Set how close (in meters) an object must be to a toddler before triggering an alert. For example:
+                    <ul>
+                        <li>If set to 1.5 meters: A kettle 1.2 meters from a toddler triggers an alert.</li>
+                        <li>If set to 0.5 meters: Only objects within 0.5 meters trigger alerts.</li>
+                    </ul>
+                </li>
+                <li><strong>Minkowski p value:</strong> Choose how distance is measured:
+                    <ul>
+                        <li>p=1 (Manhattan): Grid-based distance (better for structured environments)</li>
+                        <li>p=2 (Euclidean): Direct line distance (better for open spaces)</li>
+                    </ul>
+                </li>
+                <li><strong>Known Width:</strong> Average toddler shoulder width for distance calculation (default: 0.3 meters).</li>
+            </ul>
+            
+            <h3>Hazardous Objects Tab:</h3>
+            <p>Customize the list of hazardous objects that trigger alerts when near toddlers. Enter one object per line. Objects included:</p>
+            <ul>
+                <li>coin, drink, fork, hammer, screwdriver, stapler, knife, cup, hot dog, bottle</li>
+            </ul>
+            
+            <h2 id="monitoring">5. Monitoring and Alerts</h2>
+            <h3>Visual Indicators:</h3>
+            <ul>
+                <li><strong>Green Border:</strong> Toddlers inside the safe zone (geofence)</li>
+                <li><strong>Orange Border:</strong> Toddlers outside the safe zone</li>
+                <li><strong>Purple Border:</strong> Adults/persons (light for inside, dark for outside geofence)</li>
+                <li><strong>Red Border:</strong> Hazardous objects inside the geofence</li>
+                <li><strong>Blue Border:</strong> Non-hazardous objects</li>
+                <li><strong>Distance Lines:</strong> Shows measured distance between toddlers and nearby objects</li>
+            </ul>
+            
+            <h3>Alert Types:</h3>
+            <ol>
+                <li><strong>Visual Status Updates:</strong> Color-coded status messages at the bottom of the screen</li>
+                <li><strong>Audio Alerts:</strong> Sound alert for critical situations</li>
+                <li><strong>Geofence Alerts:</strong> Status updates when toddlers exit safe zones</li>
+                <li><strong>Distance Alerts:</strong> Warnings when hazardous objects are too close</li>
+            </ol>
+            
+            <h2 id="troubleshooting">6. Troubleshooting</h2>
+            <h3>Common Issues:</h3>
+            <ul>
+                <li><strong>Camera Not Detected:</strong> Check USB connection and restart the application</li>
+                <li><strong>Low Detection Accuracy:</strong> Improve lighting or adjust camera position</li>
+                <li><strong>False Alerts:</strong> Adjust distance threshold or known width in configuration</li>
+                <li><strong>Geofence Not Working:</strong> Ensure you have 4 points and saved the geofence</li>
+            </ul>
+            
+            <p class="warning"><strong>Important:</strong> This system is designed as a safety aid tool and should not replace active supervision of children.</p>
         </body>
         </html>
         """

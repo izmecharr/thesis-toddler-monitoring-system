@@ -14,14 +14,7 @@ HAZARDOUS_OBJECTS = [
     'screwdriver', 
     'stapler', 
     'sharp-item', 
-    'cell phone', 
-    'knife', 
-    'scissor', 
-    'battery',
-    'pill',
-    'medicine',
-    'lighter',
-    'matches'
+    'cell phone'
 ]
 
 # Distance threshold for proximity alerts (meters)

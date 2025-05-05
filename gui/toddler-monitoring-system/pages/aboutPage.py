@@ -123,11 +123,11 @@ class AboutDialog(QDialog):
         description_label = QLabel(
             "<html><body>"
             "<p>The <b>Toddler Monitoring System</b> is a safety-focused application "
-            "that uses advanced computer vision to detect and monitor toddlers, "
-            "ensuring their safety by alerting caregivers of potential hazards.</p>"
-            "<p>Using state-of-the-art YOLO object detection, the system identifies "
+            "that uses YOLOv8 model with increased confidence score to detect and monitor "
+            "toddlers, ensuring their safety by alerting caregivers of potential hazards.</p>"
+            "<p>Using YOLOv8 object detection, the system identifies "
             "toddlers and objects in real-time and measures distances between them "
-            "to detect potential dangerous situations.</p>"
+            "to detect potentially dangerous hazards.</p>"
             "</body></html>"
         )
         description_label.setWordWrap(True)
@@ -145,7 +145,11 @@ class AboutDialog(QDialog):
             "<li>Real-time toddler detection and tracking</li>"
             "<li>Proximity alerts for dangerous objects</li>"
             "<li>Distance measurement and safety monitoring</li>"
-            "<li>Customizable alert thresholds</li>"
+            "<li>Customizable alert thresholds and distance metrics</li>"
+            "<li>Geofence creation for safe zones</li>"
+            "<li>Hazardous object configuration</li>"
+            "<li>Visual and audio alerts</li>"
+            "<li>Distinguishes between toddlers and other person</li>"
             "</ul>"
             "</body></html>"
         )
@@ -162,12 +166,12 @@ class AboutDialog(QDialog):
             "<p>Developed by: Amorato, Charlize C. | Borje, Mika Emmanuel | Trinidad, Lorenzo Earl</p>"
             "<p>This application uses the following technologies:</p>"
             "<ul>"
-            "<li>YOLO (You Only Look Once) - Object Detection</li>"
+            "<li>YOLO11 - Object Detection</li>"
             "<li>OpenCV - Computer Vision Library</li>"
             "<li>PyQt5 - User Interface Framework</li>"
             "<li>Python - Programming Language</li>"
             "</ul>"
-            "<p>© 2025 All rights reserved.</p>"
+            "<p>© 2025 Technological Institute of the Philippines. All rights reserved.</p>"
             "</body></html>"
         )
         credits_text.setIndent(20)

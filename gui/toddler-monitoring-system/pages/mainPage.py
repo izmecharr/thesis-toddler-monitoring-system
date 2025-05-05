@@ -691,7 +691,7 @@ class Ui_MainWindow(object):
                                 if is_hazardous and is_inside_geofence:
                                     # Red color for hazardous objects inside geofence
                                     box_color = (255, 0, 0)  # BGR: Red
-                                    # Show alert for toddler outside geofence
+                                    # Show alert for hazard inside safe area
                                     self.update_status(f"WARNING: Hazard is inside the safe area!", "warning")
                                     self.play_alarm_sound()
                                     
@@ -759,11 +759,10 @@ class Ui_MainWindow(object):
                                         if geofence_manager.point_in_polygon(obj_center[0], obj_center[1], geofence_manager.saved_geofence):
                                             object_inside_geofence = True
                                 
-                                # Check if object is too close to toddler AND inside geofence
+                                # Check if object is too close to toddler
                                 if (estimated_distance is not None and 
                                     estimated_distance < self.distance_threshold and
-                                    self.is_hazardous(obj_name) and
-                                    object_inside_geofence):  # Added geofence condition
+                                    self.is_hazardous(obj_name)):  # Added geofence condition
                                     
                                     # Update status and send notification
                                     self.update_status(f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f}m)", "warning")

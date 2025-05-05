@@ -638,56 +638,67 @@ class Ui_MainWindow(object):
                                     geofence_status = " [Outside]"
                                     is_inside_geofence = False
                         
-                        # Check if detection is a toddler/child/person with good confidence
-                        if cls_name in ['person','toddler'] and conf > 0.50:
-                            # Store toddler detection
-                            width = x2 - x1
-                            toddlers.append((x1, y1, x2, y2, width))
-                            
-                            # ADD THIS: Check if toddler is outside geofence
-                            if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
-                                # Change box color to orange/yellow for toddlers outside geofence
-                                toddler_box_color = (0, 165, 255)  # BGR: Orange
+                        # MODIFIED: Check if detection is a person/toddler with good confidence
+                        if conf > 0.50:
+                            # Check if it's a person or toddler
+                            if cls_name in ['person', 'toddler']:
+                                # Store toddler detection
+                                width = x2 - x1
+                                toddlers.append((x1, y1, x2, y2, width))
                                 
-                                # Show alert for toddler outside geofence
-                                self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
-                                self.play_alarm_sound()
+                                # MODIFIED: Add color differentiation for person vs toddler
+                                if cls_name == 'person':
+                                    if is_inside_geofence:
+                                        # Bright purple for persons inside geofence
+                                        person_box_color = (255, 0, 255)  # BGR: Magenta/Bright purple
+                                    else:
+                                        # Dark purple for persons outside geofence
+                                        person_box_color = (128, 0, 128)  # BGR: Purple
+                                else:  # toddler
+                                    if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
+                                        # Orange for toddlers outside geofence
+                                        person_box_color = (0, 165, 255)  # BGR: Orange
+                                        # Show alert for toddler outside geofence
+                                        self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
+                                        self.play_alarm_sound()
+                                    else:
+                                        # Green for toddlers inside geofence
+                                        person_box_color = (0, 255, 0)  # BGR: Green
+                                
+                                # Draw bounding box for person/toddler with appropriate color
+                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), person_box_color, 2)
+                                
+                                # Add label with confidence and geofence status
+                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
+                                cv2.putText(frame_rgb, label, (x1, y1-10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, person_box_color, 2)
+                            
                             else:
-                                toddler_box_color = (0, 255, 0)  # BGR: Green
-                            
-                            # Draw bounding box for toddler with appropriate color
-                            cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), toddler_box_color, 2)
-                            
-                            # Add label with confidence and geofence status
-                            label = f"{geofence_status} {cls_name}: {conf:.2f}"
-                            cv2.putText(frame_rgb, label, (x1, y1-10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, toddler_box_color, 2)
-                            
-                        elif conf > 0.50:
-                            # Determine if the object is hazardous
-                            is_hazardous = self.is_hazardous(cls_name)
-                            
-                            # Store other detected objects
-                            other_objects.append((cls_name, x1, y1, x2, y2, conf))
-                            
-                            # MODIFIED: Determine box color based on hazardous status and geofence position
-                            if is_hazardous and is_inside_geofence:
-                                # Red color for hazardous objects inside geofence
-                                box_color = (255, 0, 0)  # BGR: Red
-                            elif is_hazardous and not is_inside_geofence:
-                                # Blue color for hazardous objects outside geofence
-                                box_color = (0, 0, 255)  # BGR: Blue
-                            else:
-                                # Default blue color for non-hazardous objects
-                                box_color = (0, 0, 255)  # BGR: Blue
-                            
-                            # Create label with geofence status
-                            label = f"{geofence_status} {cls_name}: {conf:.2f}"
-                            
-                            # Draw the box and label
-                            cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
-                            cv2.putText(frame_rgb, label, (x1, y1-10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
+                                # Handle other objects (not person/toddler)
+                                # Determine if the object is hazardous
+                                is_hazardous = self.is_hazardous(cls_name)
+                                
+                                # Store other detected objects
+                                other_objects.append((cls_name, x1, y1, x2, y2, conf))
+                                
+                                # MODIFIED: Determine box color based on hazardous status and geofence position
+                                if is_hazardous and is_inside_geofence:
+                                    # Red color for hazardous objects inside geofence
+                                    box_color = (255, 0, 0)  # BGR: Red
+                                elif is_hazardous and not is_inside_geofence:
+                                    # Blue color for hazardous objects outside geofence
+                                    box_color = (0, 0, 255)  # BGR: Blue
+                                else:
+                                    # Default blue color for non-hazardous objects
+                                    box_color = (0, 0, 255)  # BGR: Blue
+                                
+                                # Create label with geofence status
+                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
+                                
+                                # Draw the box and label
+                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
+                                cv2.putText(frame_rgb, label, (x1, y1-10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
                     
                     # Store detected toddlers
                     self._detected_toddlers = toddlers

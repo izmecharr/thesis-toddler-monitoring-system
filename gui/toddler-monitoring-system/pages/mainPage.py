@@ -691,12 +691,16 @@ class Ui_MainWindow(object):
                                 if is_hazardous and is_inside_geofence:
                                     # Red color for hazardous objects inside geofence
                                     box_color = (255, 0, 0)  # BGR: Red
+                                    # Show alert for toddler outside geofence
+                                    self.update_status(f"WARNING: Hazard is inside the safe area!", "warning")
+                                    self.play_alarm_sound()
+                                    
                                 elif is_hazardous and not is_inside_geofence:
                                     # Blue color for hazardous objects outside geofence
-                                    box_color = (0, 0, 255)  # BGR: Blue
+                                    box_color = (255, 0, 0)  # BGR: Red
                                 else:
                                     # Default blue color for non-hazardous objects
-                                    box_color = (0, 0, 255)  # BGR: Blue
+                                    box_color = (255, 0, 0)  # BGR: Red
                                 
                                 # Create label with geofence status
                                 label = f"{geofence_status} {cls_name}: {conf:.2f}"

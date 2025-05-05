@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from PyQt5.QtWidgets import QMessageBox
 import math
-import sys
+
 from ultralytics import YOLO
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QFont, QIcon
 from PyQt5.QtCore import Qt
@@ -22,26 +22,14 @@ from ultralytics import YOLO
 # Import from other pages
 from .aboutPage import AboutDialog
 from .helpPage import HelpDialog
-from .styles import DarkThemeStyle
 # from .mobileHelpPage import show_mobile_help
+from .styles import DarkThemeStyle
 
 # Import from integration
 from integration import (
     integrate_geofence,
     HAZARDOUS_OBJECTS
 )
-
-# # Add the parent directory of the 'gui' folder to the path
-# current_dir = os.path.dirname(os.path.abspath(__file__))  # pages directory
-# gui_dir = os.path.dirname(current_dir)  # gui/toddler-monitoring-system directory
-# base_dir = os.path.dirname(gui_dir)  # gui directory
-# root_dir = os.path.dirname(base_dir)  # New folder (2) directory
-
-# sys.path.append(root_dir)  # Add root directory to path
-
-# # Now import the function
-# from Trainer_Model.temp_model.modified_yolov8 import load_model_with_yaml
-
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         # Set window icon and title bar style
@@ -337,7 +325,7 @@ class Ui_MainWindow(object):
             self.update_status("Loading YOLO model...", "normal")
             # Update this path to your model path
             self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
-            #self.model = load_model_with_yaml("C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\models\\enhanced_yolov8n_final.pt", wrap_for_training=False)
+            #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\enhanced_yolov8\\enhanced_n_3\\weights\\best.pt')
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\runs\\detect\\my_custom_model5\\weights\\best.pt')
             
             self.update_status("YOLO model loaded successfully", "success")
@@ -346,9 +334,9 @@ class Ui_MainWindow(object):
             self.model = None
         
         # Distance calculation parameters
-        self.known_width = 0.5  # Average human shoulder width in meters
+        self.known_width = 0.3  # Average human shoulder width in meters
         self.focal_length = None  # To be calculated dynamically
-        self.distance_threshold = 1.5  # Alert if distance is less than this (meters)
+        self.distance_threshold = 1.0  # Alert if distance is less than this (meters)
         self.minkowski_p = 2  # Minkowski distance parameter (1=Manhattan, 2=Euclidean)
         
         # Define hazardous objects list
@@ -378,15 +366,15 @@ class Ui_MainWindow(object):
     def play_alarm_sound(self):
         """Play an alarm sound locally"""
         try:
-            import winsound
+            from PyQt5.QtMultimedia import QSound
             # Play Windows alert sound
-            QSound.play("alert.wav")
-            #winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
+            QSound.play("C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\assets\\alert.wav")  # Make sure you have an alert.wav file
+            
         except:
             # If winsound is not available, use QSound
             try:
-                from PyQt5.QtMultimedia import QSound
-                QSound.play("alert.wav")  # Make sure you have an alert.wav file
+                import winsound
+                winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
             except:
                 pass  # Fail silently if no sound system is available
     
@@ -455,7 +443,7 @@ class Ui_MainWindow(object):
         
         # Distance threshold configuration
         thresholdLayout = QtWidgets.QHBoxLayout()
-        thresholdLabel = QtWidgets.QLabel("Distance threshold (meters):")
+        thresholdLabel = QtWidgets.QLabel("Distance threshold:")
         thresholdLabel.setMinimumWidth(200)
         thresholdLabel.setStyleSheet(f"color: {DarkThemeStyle.TEXT_PRIMARY};")
         thresholdSpinBox = QtWidgets.QDoubleSpinBox()
@@ -467,7 +455,7 @@ class Ui_MainWindow(object):
 
         # Known width configuration
         widthLayout = QtWidgets.QHBoxLayout()
-        widthLabel = QtWidgets.QLabel("Known width (meters):")
+        widthLabel = QtWidgets.QLabel("Known width:")
         widthLabel.setMinimumWidth(200)
         widthLabel.setStyleSheet(f"color: {DarkThemeStyle.TEXT_PRIMARY};")
         widthSpinBox = QtWidgets.QDoubleSpinBox()
@@ -589,7 +577,7 @@ class Ui_MainWindow(object):
         return (self.known_width * self.focal_length) / pixel_width
 
     def update_frame(self):
-        """Process each frame with YOLO object detection - Updated to send alerts to mobile"""
+        """Process each frame with YOLO object detection"""
         ret, frame = self.camera.read()
         if ret:
             # Convert frame to RGB for YOLO processing
@@ -600,18 +588,8 @@ class Ui_MainWindow(object):
             
             # Process with YOLO model if available
             if self.model:
-                # Convert frame to PyTorch tensor and normalize
-                import torch
-                frame_tensor = torch.from_numpy(frame_rgb).float() / 255.0
-                frame_tensor = frame_tensor.permute(2, 0, 1).unsqueeze(0)  # Convert to CHW format
-                
-                # Move to appropriate device
-                device = next(self.model.parameters()).device
-                frame_tensor = frame_tensor.to(device)
-                
-                # Run YOLO detection on the tensor
-                with torch.no_grad():
-                    results = self.model(frame_tensor)
+                # Run YOLO detection on the frame
+                results = self.model(frame_rgb)
                 
                 # Store results for geofence processing
                 self.model.results = results
@@ -661,7 +639,7 @@ class Ui_MainWindow(object):
                                     geofence_color_suffix = " ✗"  # Add cross for objects outside
                         
                         # Check if detection is a toddler/child/person with good confidence
-                        if cls_name in ['person', 'child', 'toddler'] and conf > 0.50:
+                        if cls_name in ['person','toddler'] and conf > 0.50:
                             # Store toddler detection
                             width = x2 - x1
                             toddlers.append((x1, y1, x2, y2, width))
@@ -735,7 +713,7 @@ class Ui_MainWindow(object):
                                         # Add distance label
                                         mid_x = (toddler_center[0] + obj_center[0]) // 2
                                         mid_y = (toddler_center[1] + obj_center[1]) // 2
-                                        dist_label = f"{estimated_distance:.2f}m"
+                                        dist_label = f"{estimated_distance:.2f}"
                                         cv2.putText(frame_rgb, dist_label, (mid_x, mid_y), 
                                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
                                 
@@ -745,16 +723,8 @@ class Ui_MainWindow(object):
                                     estimated_distance < self.distance_threshold and
                                     self.is_hazardous(obj_name)):  # Add this condition
                                     # Update status and send notification
-                                    alert_message = f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f}m)"
-                                    self.update_status(alert_message, "warning")
-                                    
-                                    # Send alert to mobile app
-                                    if hasattr(self.main_window, 'send_mobile_alert'):
-                                        self.main_window.send_mobile_alert(
-                                            "Hazard Proximity", 
-                                            f"Warning: Toddler is too close to {obj_name}!"
-                                        )
-                                    
+                                    self.update_status(f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f}m)", "warning")
+                                    # Notification would go here if you have a notification system
                                     self.play_alarm_sound()
                     
                     hazardous_objects = []
@@ -803,7 +773,6 @@ class Ui_MainWindow(object):
                                         QtCore.Qt.KeepAspectRatio, 
                                         QtCore.Qt.SmoothTransformation)
             
-            # Display the scaled pixmap
             self.cameraView.setPixmap(scaled_pixmap)
             
     def stop_camera(self):
@@ -847,63 +816,16 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         self.ui.actionFAQs.triggered.connect(self.show_faqs)
         self.ui.actionAbout.triggered.connect(self.show_about_dialog)
         
-        # # Initialize mobile app integration
-        # integrate_mobile_app(self)
-        
-        # # Check if Mobile menu already exists before adding it
-        # if not hasattr(self, '_mobile_menu_added'):
-        #     self.add_mobile_connection_menu()
-        #     self._mobile_menu_added = True
-        
-        # # Add method to send alerts to mobile
-        # self.send_mobile_alert = self.handle_mobile_alert
-    
-    # def add_mobile_connection_menu(self):
-    #     """Add menu item for mobile connection"""
-    #     try:
-    #         # Ensure the menubar exists
-    #         if not hasattr(self.ui, 'menubar'):
-    #             self.ui.menubar = QtWidgets.QMenuBar(self)
-    #             self.setMenuBar(self.ui.menubar)
+        # # ADD THIS CODE HERE - Add menu item to help menu for mobile app connection
+        # if hasattr(self, 'ui') and hasattr(self.ui, 'menuHelp'):
+        #     # Add separator before mobile options
+        #     self.ui.menuHelp.addSeparator()
             
-    #         # Remove any existing Mobile menus
-    #         actions_to_remove = []
-    #         for action in self.ui.menubar.actions():
-    #             if action.text() == "Mobile":
-    #                 actions_to_remove.append(action)
-            
-    #         # Delete all Mobile menu actions
-    #         for action in actions_to_remove:
-    #             if action.menu():
-    #                 action.menu().deleteLater()
-    #             self.ui.menubar.removeAction(action)
-            
-    #         # Create new Mobile menu
-    #         mobile_menu = QtWidgets.QMenu("Mobile", self)
-    #         self.ui.menubar.addMenu(mobile_menu)
-            
-    #         # Add Connect Mobile App action
-    #         connect_action = QtWidgets.QAction("Connect Mobile App", self)
-    #         connect_action.triggered.connect(self.show_mobile_connection_dialog)
-    #         mobile_menu.addAction(connect_action)
-            
-    #         # Add separator
-    #         mobile_menu.addSeparator()
-            
-    #         # Add Mobile Help action  
-    #         mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
-    #         mobile_help_action.triggered.connect(show_mobile_help)
-    #         mobile_menu.addAction(mobile_help_action)
-            
-    #     except Exception as e:
-    #         print(f"Error creating mobile menu: {e}")
+        #     # Add Mobile App Help action
+        #     mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
+        #     mobile_help_action.triggered.connect(show_mobile_help)
+        #     self.ui.menuHelp.addAction(mobile_help_action)
 
-    # def handle_mobile_alert(self, alert_type, message):
-    #     """Send alert to mobile devices"""
-    #     if hasattr(self, 'mobile_server_manager'):
-    #         print(f"Sending alert to mobile: {alert_type} - {message}")
-    #         self.mobile_server_manager.send_alert(alert_type, message)
-    
     def on_resize(self, event):
         """Handle window resize events"""
         # Make sure camera view is updated if there's a pixmap

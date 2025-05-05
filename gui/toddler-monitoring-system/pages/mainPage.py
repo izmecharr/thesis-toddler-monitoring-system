@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from PyQt5.QtWidgets import QMessageBox
 import math
-
+import sys
 from ultralytics import YOLO
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QFont, QIcon
 from PyQt5.QtCore import Qt
@@ -22,8 +22,8 @@ from ultralytics import YOLO
 # Import from other pages
 from .aboutPage import AboutDialog
 from .helpPage import HelpDialog
-from .mobileHelpPage import show_mobile_help
 from .styles import DarkThemeStyle
+from .mobileHelpPage import show_mobile_help
 
 # Import from integration
 from integration import (
@@ -31,6 +31,18 @@ from integration import (
     integrate_mobile_app,
     HAZARDOUS_OBJECTS
 )
+
+# # Add the parent directory of the 'gui' folder to the path
+# current_dir = os.path.dirname(os.path.abspath(__file__))  # pages directory
+# gui_dir = os.path.dirname(current_dir)  # gui/toddler-monitoring-system directory
+# base_dir = os.path.dirname(gui_dir)  # gui directory
+# root_dir = os.path.dirname(base_dir)  # New folder (2) directory
+
+# sys.path.append(root_dir)  # Add root directory to path
+
+# # Now import the function
+# from Trainer_Model.temp_model.modified_yolov8 import load_model_with_yaml
+
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         # Set window icon and title bar style
@@ -326,7 +338,7 @@ class Ui_MainWindow(object):
             self.update_status("Loading YOLO model...", "normal")
             # Update this path to your model path
             self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
-            #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\enhanced_yolov8\\enhanced_n_3\\weights\\best.pt')
+            #self.model = load_model_with_yaml("C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\models\\enhanced_yolov8n_final.pt", wrap_for_training=False)
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\runs\\detect\\my_custom_model5\\weights\\best.pt')
             
             self.update_status("YOLO model loaded successfully", "success")
@@ -588,8 +600,18 @@ class Ui_MainWindow(object):
             
             # Process with YOLO model if available
             if self.model:
-                # Run YOLO detection on the frame
-                results = self.model(frame_rgb)
+                # Convert frame to PyTorch tensor and normalize
+                import torch
+                frame_tensor = torch.from_numpy(frame_rgb).float() / 255.0
+                frame_tensor = frame_tensor.permute(2, 0, 1).unsqueeze(0)  # Convert to CHW format
+                
+                # Move to appropriate device
+                device = next(self.model.parameters()).device
+                frame_tensor = frame_tensor.to(device)
+                
+                # Run YOLO detection on the tensor
+                with torch.no_grad():
+                    results = self.model(frame_tensor)
                 
                 # Store results for geofence processing
                 self.model.results = results
@@ -781,6 +803,9 @@ class Ui_MainWindow(object):
                                         QtCore.Qt.KeepAspectRatio, 
                                         QtCore.Qt.SmoothTransformation)
             
+            # Display the scaled pixmap
+            self.cameraView.setPixmap(scaled_pixmap)
+            
     def stop_camera(self):
         self.timer.stop()
         if self.camera is not None:
@@ -825,17 +850,37 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         # Initialize mobile app integration
         integrate_mobile_app(self)
         
-        # Add Mobile Connect menu action
-        self.add_mobile_connection_menu()
+        # Check if Mobile menu already exists before adding it
+        if not hasattr(self, '_mobile_menu_added'):
+            self.add_mobile_connection_menu()
+            self._mobile_menu_added = True
         
         # Add method to send alerts to mobile
         self.send_mobile_alert = self.handle_mobile_alert
     
     def add_mobile_connection_menu(self):
         """Add menu item for mobile connection"""
-        if hasattr(self, 'ui') and hasattr(self.ui, 'menubar'):
-            # Create Mobile menu
-            mobile_menu = self.ui.menubar.addMenu("Mobile")
+        try:
+            # Ensure the menubar exists
+            if not hasattr(self.ui, 'menubar'):
+                self.ui.menubar = QtWidgets.QMenuBar(self)
+                self.setMenuBar(self.ui.menubar)
+            
+            # Remove any existing Mobile menus
+            actions_to_remove = []
+            for action in self.ui.menubar.actions():
+                if action.text() == "Mobile":
+                    actions_to_remove.append(action)
+            
+            # Delete all Mobile menu actions
+            for action in actions_to_remove:
+                if action.menu():
+                    action.menu().deleteLater()
+                self.ui.menubar.removeAction(action)
+            
+            # Create new Mobile menu
+            mobile_menu = QtWidgets.QMenu("Mobile", self)
+            self.ui.menubar.addMenu(mobile_menu)
             
             # Add Connect Mobile App action
             connect_action = QtWidgets.QAction("Connect Mobile App", self)
@@ -849,6 +894,9 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
             mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
             mobile_help_action.triggered.connect(show_mobile_help)
             mobile_menu.addAction(mobile_help_action)
+            
+        except Exception as e:
+            print(f"Error creating mobile menu: {e}")
 
     def handle_mobile_alert(self, alert_type, message):
         """Send alert to mobile devices"""

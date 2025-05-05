@@ -12,12 +12,12 @@ from .mainPage import (
 from .aboutPage import AboutDialog
 from .helpPage import HelpDialog
 from .mobileHelpPage import show_mobile_help
-from .mobileQrPage import (
-    QRScanPage,
-    AlertPage,
-    NetworkClient,
-    ToddlerAlarmApp
-)
+# from .mobileQrPage import (
+#     QRScanPage,
+#     AlertPage,
+#     NetworkClient,
+#     ToddlerAlarmApp
+# )
 
 # Remove this line - mainApp is not in the pages package
 # from .mainApp import main, show_mobile_help as app_show_mobile_help

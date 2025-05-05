@@ -1,7 +1,7 @@
 #mobileHelpPage.py
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtCore import Qt
-#from styles import DarkThemeStyle
+from .styles import DarkThemeStyle
 
 def show_mobile_help():
     """

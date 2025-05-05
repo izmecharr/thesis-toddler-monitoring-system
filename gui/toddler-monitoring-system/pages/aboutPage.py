@@ -159,7 +159,7 @@ class AboutDialog(QDialog):
         
         credits_text = QLabel(
             "<html><body>"
-            "<p>Developed by: Amorato, Charlize C. Borje | Mika Emmanuel | Trinidad, Lorenzo Earl</p>"
+            "<p>Developed by: Amorato, Charlize C. | Borje, Mika Emmanuel | Trinidad, Lorenzo Earl</p>"
             "<p>This application uses the following technologies:</p>"
             "<ul>"
             "<li>YOLO (You Only Look Once) - Object Detection</li>"

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-#serverIntegration.py
+# serverIntegration.py - Updated for proper mobile connection with dual QR codes
+
 import socket
+import socketio
 import threading
 import json
 import qrcode
@@ -14,13 +16,9 @@ from PyQt5.QtCore import Qt, QObject, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                            QPushButton, QFrame, QMessageBox, QAction, QFileDialog,
-                           QCheckBox)
+                           QCheckBox, QButtonGroup, QGroupBox)
 import time
 import random
-
-
-# Import from same package
-from .appIntegration import integrate_mobile_app
 
 class WebServerThread(threading.Thread):
     """
@@ -29,14 +27,6 @@ class WebServerThread(threading.Thread):
     """
     
     def __init__(self, host, port, app_path):
-        """
-        Initialize the web server thread.
-        
-        Args:
-            host (str): Host IP to bind to
-            port (int): Port to bind to
-            app_path (str): Path to the app APK file
-        """
         super(WebServerThread, self).__init__()
         self.daemon = True
         self.host = host
@@ -182,7 +172,7 @@ class WebServerThread(threading.Thread):
 
 
 class MobileServerManager(QObject):
-    """Manages the server and connections to mobile alarm app clients"""
+    """Manages the socket.io server and connections to mobile alert app clients"""
     
     # Define signals
     connection_status_changed = pyqtSignal(bool, str)  # connected, client_info
@@ -190,17 +180,21 @@ class MobileServerManager(QObject):
     
     def __init__(self, parent=None):
         super(MobileServerManager, self).__init__(parent)
-        self.server_socket = None
         self.server_thread = None
         self.web_server_thread = None
         self.clients = []
-        self.client_threads = []
         self.is_running = False
         self.server_ip = self._get_local_ip()
-        self.server_port = 8765  # Default port
+        self.server_port = 3000  # Default port for socket.io
         self.web_server_port = 8080  # Default web server port
         self.app_id = f"toddler_monitor_{random.randint(10000, 99999)}"  # Generate random app ID
         self.app_path = ""  # Path to the mobile app APK
+        
+        # Create socket.io server
+        self.sio = socketio.Server(cors_allowed_origins='*')
+        
+        # Set up event handlers
+        self._setup_event_handlers()
     
     def _get_local_ip(self):
         """Get the local IP address of this machine"""
@@ -219,26 +213,47 @@ class MobileServerManager(QObject):
         """Set the path to the mobile app APK file"""
         self.app_path = path
     
+    def _setup_event_handlers(self):
+        """Set up socket.io event handlers"""
+        
+        @self.sio.on('connect')
+        def on_connect(sid, environ):
+            print(f'Client connected: {sid}')
+            self.clients.append(sid)
+            self.client_count_changed.emit(len(self.clients))
+            self.connection_status_changed.emit(True, f"Connected: {sid}")
+        
+        @self.sio.on('disconnect')
+        def on_disconnect(sid):
+            print(f'Client disconnected: {sid}')
+            if sid in self.clients:
+                self.clients.remove(sid)
+                self.client_count_changed.emit(len(self.clients))
+                if len(self.clients) == 0:
+                    self.connection_status_changed.emit(False, "All clients disconnected")
+        
+        @self.sio.on('register_mobile')
+        def on_register_mobile(sid, data):
+            print(f'Mobile device registered: {data}')
+            # Send confirmation
+            self.sio.emit('connection_success', room=sid)
+    
     def start_server(self):
-        """Start the server in a background thread"""
+        """Start the socket.io server and web server in background threads"""
         if self.is_running:
             return
         
         try:
-            # Create server socket
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # Create socket.io server app
+            app = socketio.WSGIApp(self.sio)
             
-            # Bind to a free port
-            self.server_socket.bind((self.server_ip, self.server_port))
-            self.server_socket.listen(5)
-            
-            # Get the actual port that was assigned
-            _, self.server_port = self.server_socket.getsockname()
+            # Create a simple WSGI server
+            from wsgiref.simple_server import make_server
+            server = make_server(self.server_ip, self.server_port, app)
             
             # Start server thread
             self.is_running = True
-            self.server_thread = threading.Thread(target=self._accept_connections)
+            self.server_thread = threading.Thread(target=server.serve_forever)
             self.server_thread.daemon = True
             self.server_thread.start()
             
@@ -247,35 +262,25 @@ class MobileServerManager(QObject):
                 self.web_server_thread = WebServerThread(self.server_ip, self.web_server_port, self.app_path)
                 self.web_server_thread.start()
             
-            print(f"Server started on {self.server_ip}:{self.server_port}")
+            print(f"Socket.io server started on {self.server_ip}:{self.server_port}")
             return True
             
         except Exception as e:
             print(f"Failed to start server: {str(e)}")
-            if self.server_socket:
-                self.server_socket.close()
-                self.server_socket = None
+            self.is_running = False
             return False
     
     def stop_server(self):
-        """Stop the server and disconnect all clients"""
+        """Stop the servers"""
         self.is_running = False
         
-        # Close all client connections
+        # Disconnect all clients
         for client in self.clients:
             try:
-                client.close()
+                self.sio.disconnect(client)
             except:
                 pass
         self.clients = []
-        
-        # Close server socket
-        if self.server_socket:
-            try:
-                self.server_socket.close()
-            except:
-                pass
-            self.server_socket = None
         
         # Stop web server if running
         if self.web_server_thread and self.web_server_thread.is_running:
@@ -287,106 +292,6 @@ class MobileServerManager(QObject):
         
         print("Server stopped")
     
-    def _accept_connections(self):
-        """Thread function to accept incoming connections"""
-        while self.is_running:
-            try:
-                # Accept a new connection
-                client_socket, client_address = self.server_socket.accept()
-                
-                # Add to clients list
-                self.clients.append(client_socket)
-                
-                # Start a thread to handle this client
-                client_thread = threading.Thread(
-                    target=self._handle_client,
-                    args=(client_socket, client_address)
-                )
-                client_thread.daemon = True
-                client_thread.start()
-                self.client_threads.append(client_thread)
-                
-                # Update client count
-                self.client_count_changed.emit(len(self.clients))
-                
-                # Emit connection status change
-                client_info = f"{client_address[0]}:{client_address[1]}"
-                self.connection_status_changed.emit(True, client_info)
-                
-                print(f"New connection from {client_address}")
-                
-            except:
-                if not self.is_running:
-                    break
-                time.sleep(0.1)
-    
-    def _handle_client(self, client_socket, client_address):
-        """Thread function to handle communication with a client"""
-        try:
-            # Send welcome message
-            welcome_msg = {
-                "type": "welcome",
-                "message": "Connected to Toddler Monitoring System",
-                "app_id": self.app_id
-            }
-            client_socket.send(json.dumps(welcome_msg).encode('utf-8'))
-            
-            # Receive loop
-            while self.is_running and client_socket in self.clients:
-                try:
-                    # Try to receive data (with timeout)
-                    client_socket.settimeout(1.0)
-                    data = client_socket.recv(4096)
-                    
-                    if not data:
-                        # Client disconnected
-                        break
-                    
-                    # Process received data
-                    try:
-                        message = json.loads(data.decode('utf-8'))
-                        print(f"Received from client: {message}")
-                        
-                        # Handle different message types
-                        if message.get("type") == "ping":
-                            # Respond to ping
-                            response = {"type": "pong", "timestamp": time.time()}
-                            client_socket.send(json.dumps(response).encode('utf-8'))
-                        
-                    except json.JSONDecodeError:
-                        print("Received invalid JSON data")
-                
-                except socket.timeout:
-                    # This is normal, just continue
-                    continue
-                except:
-                    # Other error, client probably disconnected
-                    break
-        
-        except Exception as e:
-            print(f"Error handling client: {str(e)}")
-        
-        finally:
-            # Client disconnected or error occurred
-            try:
-                client_socket.close()
-            except:
-                pass
-            
-            # Remove from clients list
-            if client_socket in self.clients:
-                self.clients.remove(client_socket)
-                
-                # Update client count
-                self.client_count_changed.emit(len(self.clients))
-                
-                # Emit connection status change
-                client_info = f"{client_address[0]}:{client_address[1]}"
-                if len(self.clients) == 0:
-                    self.connection_status_changed.emit(False, f"Client {client_info} disconnected")
-                
-                print(f"Client {client_address} disconnected")
-    
     def send_alert(self, alert_type, message):
         """Send an alert to all connected clients"""
         if not self.clients:
@@ -394,56 +299,43 @@ class MobileServerManager(QObject):
             return False
         
         alert = {
-            "type": "alert",
-            "alert_type": alert_type,
+            "type": alert_type,
             "message": message,
             "timestamp": time.time()
         }
         
-        alert_json = json.dumps(alert).encode('utf-8')
-        
         # Send to all clients
-        for client in self.clients[:]:  # Copy the list to avoid modification issues
-            try:
-                client.send(alert_json)
-            except:
-                # Error sending, client probably disconnected
-                try:
-                    client.close()
-                except:
-                    pass
-                if client in self.clients:
-                    self.clients.remove(client)
-        
-        # Update client count in case any clients were removed
-        self.client_count_changed.emit(len(self.clients))
+        self.sio.emit('toddler_alert', alert)
+        print(f"Alert sent to {len(self.clients)} clients")
         
         return True
     
-    def generate_qr_code(self):
-        """Generate a QR code with connection information and app download URL"""
-        # Create connection info with both server info and web server for app download
+    def generate_download_qr_code(self):
+        """Generate a QR code for downloading the app"""
+        download_url = f"http://{self.server_ip}:{self.web_server_port}/"
+        return self._create_qr_code(download_url)
+    
+    def generate_connection_qr_code(self):
+        """Generate a QR code for connecting to the monitoring system"""
         connection_info = {
+            "type": "connection",
             "host": self.server_ip,
             "port": self.server_port,
-            "app_id": self.app_id
+            "app_id": self.app_id,
+            "web_server_url": f"http://{self.server_ip}:{self.web_server_port}/"
         }
-        
-        # Add web server URL if enabled
-        if self.web_server_thread and self.web_server_thread.is_running:
-            connection_info["app_download_url"] = f"http://{self.server_ip}:{self.web_server_port}/"
-        
-        # Convert to JSON string
         json_data = json.dumps(connection_info)
-        
-        # Generate QR code
+        return self._create_qr_code(json_data)
+    
+    def _create_qr_code(self, data):
+        """Helper method to create QR code image"""
         qr = qrcode.QRCode(
-            version=1,
+            version=None,  # Auto-size
             error_correction=qrcode.constants.ERROR_CORRECT_L,
             box_size=10,
             border=4,
         )
-        qr.add_data(json_data)
+        qr.add_data(data)
         qr.make(fit=True)
         
         # Create QImage from QR code
@@ -467,7 +359,7 @@ class MobileConnectionDialog(QDialog):
         
         # Set window properties
         self.setWindowTitle("Mobile App Connection")
-        self.resize(500, 650)
+        self.resize(550, 700)
         
         # Initialize app path
         self.app_path = ""
@@ -520,10 +412,87 @@ class MobileConnectionDialog(QDialog):
         main_layout.setSpacing(20)
         
         # Title
-        title_label = QLabel("Connect Mobile Alert App")
+        title_label = QLabel("Toddler Alert Mobile Connection")
         title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
         title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
+        
+        # QR Code type selection
+        qr_type_group = QButtonGroup(self)
+        qr_type_layout = QHBoxLayout()
+        
+        self.download_qr_btn = QPushButton("Download App")
+        self.download_qr_btn.setCheckable(True)
+        self.download_qr_btn.setChecked(True)
+        self.download_qr_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2979FF;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                min-width: 150px;
+            }
+            QPushButton:checked {
+                background-color: #1976D2;
+            }
+            QPushButton:hover {
+                background-color: #3D8BFF;
+            }
+        """)
+        qr_type_group.addButton(self.download_qr_btn)
+        qr_type_layout.addWidget(self.download_qr_btn)
+        
+        self.connect_qr_btn = QPushButton("Connect to System")
+        self.connect_qr_btn.setCheckable(True)
+        self.connect_qr_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #424242;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                min-width: 150px;
+            }
+            QPushButton:checked {
+                background-color: #2979FF;
+            }
+            QPushButton:hover {
+                background-color: #525252;
+            }
+        """)
+        qr_type_group.addButton(self.connect_qr_btn)
+        qr_type_layout.addWidget(self.connect_qr_btn)
+        
+        main_layout.addLayout(qr_type_layout)
+        
+        # Instructions
+        self.instructions = QLabel()
+        self.instructions.setWordWrap(True)
+        self.instructions.setStyleSheet("color: white;")
+        self.instructions.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(self.instructions)
+        
+        # QR code frame
+        self.qr_frame = QFrame()
+        self.qr_frame.setStyleSheet("background-color: white; border-radius: 10px;")
+        self.qr_frame.setMinimumSize(300, 300)
+        self.qr_frame.setMaximumSize(300, 300)
+        
+        qr_layout = QVBoxLayout(self.qr_frame)
+        qr_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # QR code label
+        self.qr_label = QLabel()
+        self.qr_label.setAlignment(Qt.AlignCenter)
+        qr_layout.addWidget(self.qr_label)
+        
+        # Add QR frame to main layout centered
+        qr_container = QHBoxLayout()
+        qr_container.addStretch(1)
+        qr_container.addWidget(self.qr_frame)
+        qr_container.addStretch(1)
+        main_layout.addLayout(qr_container)
         
         # App download setup
         app_frame = QFrame()
@@ -558,38 +527,6 @@ class MobileConnectionDialog(QDialog):
         app_layout.addWidget(browse_button)
         
         main_layout.addWidget(app_frame)
-        
-        # Instructions
-        instructions = QLabel(
-            "Scan this QR code with the Toddler Alert mobile app to receive alerts "
-            "when your toddler is near hazards or outside the safe area. If the app "
-            "is not installed, scanning the QR code will take you to a download page."
-        )
-        instructions.setWordWrap(True)
-        instructions.setStyleSheet("color: white;")
-        instructions.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(instructions)
-        
-        # QR code frame
-        self.qr_frame = QFrame()
-        self.qr_frame.setStyleSheet("background-color: white; border-radius: 10px;")
-        self.qr_frame.setMinimumSize(300, 300)
-        self.qr_frame.setMaximumSize(300, 300)
-        
-        qr_layout = QVBoxLayout(self.qr_frame)
-        qr_layout.setContentsMargins(10, 10, 10, 10)
-        
-        # QR code label
-        self.qr_label = QLabel()
-        self.qr_label.setAlignment(Qt.AlignCenter)
-        qr_layout.addWidget(self.qr_label)
-        
-        # Add QR frame to main layout centered
-        qr_container = QHBoxLayout()
-        qr_container.addStretch(1)
-        qr_container.addWidget(self.qr_frame)
-        qr_container.addStretch(1)
-        main_layout.addLayout(qr_container)
         
         # Connection status
         status_frame = QFrame()
@@ -659,6 +596,35 @@ class MobileConnectionDialog(QDialog):
         button_layout.addWidget(self.close_button)
         
         main_layout.addLayout(button_layout)
+        
+        # Connect QR type button signals
+        self.download_qr_btn.clicked.connect(self.update_qr_code)
+        self.connect_qr_btn.clicked.connect(self.update_qr_code)
+        
+        # Update QR code initially
+        self.update_qr_code()
+    
+    def update_qr_code(self):
+        """Update the QR code display based on selected type"""
+        if self.download_qr_btn.isChecked():
+            self.instructions.setText(
+                "Scan this QR code with your smartphone camera to download the Toddler Alert app. "
+                "Once installed, scan another QR code to connect to this monitoring system."
+            )
+            pixmap = self.server_manager.generate_download_qr_code()
+        else:
+            self.instructions.setText(
+                "Open the Toddler Alert app on your phone and scan this QR code to connect "
+                "to the monitoring system. Once connected, you'll receive alerts when your "
+                "toddler is near hazards or outside the safe area."
+            )
+            pixmap = self.server_manager.generate_connection_qr_code()
+        
+        self.qr_label.setPixmap(pixmap.scaled(
+            280, 280, 
+            Qt.KeepAspectRatio, 
+            Qt.SmoothTransformation
+        ))
     
     def browse_for_apk(self):
         """Browse for an APK file"""
@@ -694,13 +660,8 @@ class MobileConnectionDialog(QDialog):
                 f"{web_server_info}"
             )
             
-            # Generate and display QR code
-            qr_pixmap = self.server_manager.generate_qr_code()
-            self.qr_label.setPixmap(qr_pixmap.scaled(
-                280, 280, 
-                Qt.KeepAspectRatio, 
-                Qt.SmoothTransformation
-            ))
+            # Generate and display initial QR code
+            self.update_qr_code()
         else:
             # Failed to start server
             self.status_label.setText("Server Status: Failed to start")
@@ -769,15 +730,7 @@ def integrate_mobile_alerts(main_window):
     main_window.show_mobile_connection_dialog = show_mobile_connection_dialog
     main_window.send_mobile_alert = send_mobile_alert
     
-    # Create a menu item to open the connection dialog
-    if hasattr(main_window, 'ui') and hasattr(main_window.ui, 'menubar'):
-        # Create Mobile Connection menu
-        mobile_menu = main_window.ui.menubar.addMenu("Mobile")
-        
-        # Add Connect Mobile App action
-        connect_action = QAction("Connect Mobile App", main_window)
-        connect_action.triggered.connect(show_mobile_connection_dialog)
-        mobile_menu.addAction(connect_action)
+    # REMOVED: Don't create the menu here - let mainPage.py handle it
     
     # Return the server manager
     return server_manager

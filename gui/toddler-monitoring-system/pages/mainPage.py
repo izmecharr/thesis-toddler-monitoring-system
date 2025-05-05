@@ -700,7 +700,7 @@ class Ui_MainWindow(object):
                                     box_color = (255, 0, 0)  # BGR: Red
                                 else:
                                     # Default blue color for non-hazardous objects
-                                    box_color = (255, 0, 0)  # BGR: Red
+                                    box_color = (0, 0, 255)  # BGR: Blue
                                 
                                 # Create label with geofence status
                                 label = f"{geofence_status} {cls_name}: {conf:.2f}"

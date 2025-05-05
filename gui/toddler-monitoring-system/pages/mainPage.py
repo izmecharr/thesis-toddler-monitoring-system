@@ -23,12 +23,11 @@ from ultralytics import YOLO
 from .aboutPage import AboutDialog
 from .helpPage import HelpDialog
 from .styles import DarkThemeStyle
-from .mobileHelpPage import show_mobile_help
+# from .mobileHelpPage import show_mobile_help
 
 # Import from integration
 from integration import (
     integrate_geofence,
-    integrate_mobile_app,
     HAZARDOUS_OBJECTS
 )
 
@@ -381,7 +380,8 @@ class Ui_MainWindow(object):
         try:
             import winsound
             # Play Windows alert sound
-            winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
+            QSound.play("alert.wav")
+            #winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
         except:
             # If winsound is not available, use QSound
             try:
@@ -847,62 +847,62 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         self.ui.actionFAQs.triggered.connect(self.show_faqs)
         self.ui.actionAbout.triggered.connect(self.show_about_dialog)
         
-        # Initialize mobile app integration
-        integrate_mobile_app(self)
+        # # Initialize mobile app integration
+        # integrate_mobile_app(self)
         
-        # Check if Mobile menu already exists before adding it
-        if not hasattr(self, '_mobile_menu_added'):
-            self.add_mobile_connection_menu()
-            self._mobile_menu_added = True
+        # # Check if Mobile menu already exists before adding it
+        # if not hasattr(self, '_mobile_menu_added'):
+        #     self.add_mobile_connection_menu()
+        #     self._mobile_menu_added = True
         
-        # Add method to send alerts to mobile
-        self.send_mobile_alert = self.handle_mobile_alert
+        # # Add method to send alerts to mobile
+        # self.send_mobile_alert = self.handle_mobile_alert
     
-    def add_mobile_connection_menu(self):
-        """Add menu item for mobile connection"""
-        try:
-            # Ensure the menubar exists
-            if not hasattr(self.ui, 'menubar'):
-                self.ui.menubar = QtWidgets.QMenuBar(self)
-                self.setMenuBar(self.ui.menubar)
+    # def add_mobile_connection_menu(self):
+    #     """Add menu item for mobile connection"""
+    #     try:
+    #         # Ensure the menubar exists
+    #         if not hasattr(self.ui, 'menubar'):
+    #             self.ui.menubar = QtWidgets.QMenuBar(self)
+    #             self.setMenuBar(self.ui.menubar)
             
-            # Remove any existing Mobile menus
-            actions_to_remove = []
-            for action in self.ui.menubar.actions():
-                if action.text() == "Mobile":
-                    actions_to_remove.append(action)
+    #         # Remove any existing Mobile menus
+    #         actions_to_remove = []
+    #         for action in self.ui.menubar.actions():
+    #             if action.text() == "Mobile":
+    #                 actions_to_remove.append(action)
             
-            # Delete all Mobile menu actions
-            for action in actions_to_remove:
-                if action.menu():
-                    action.menu().deleteLater()
-                self.ui.menubar.removeAction(action)
+    #         # Delete all Mobile menu actions
+    #         for action in actions_to_remove:
+    #             if action.menu():
+    #                 action.menu().deleteLater()
+    #             self.ui.menubar.removeAction(action)
             
-            # Create new Mobile menu
-            mobile_menu = QtWidgets.QMenu("Mobile", self)
-            self.ui.menubar.addMenu(mobile_menu)
+    #         # Create new Mobile menu
+    #         mobile_menu = QtWidgets.QMenu("Mobile", self)
+    #         self.ui.menubar.addMenu(mobile_menu)
             
-            # Add Connect Mobile App action
-            connect_action = QtWidgets.QAction("Connect Mobile App", self)
-            connect_action.triggered.connect(self.show_mobile_connection_dialog)
-            mobile_menu.addAction(connect_action)
+    #         # Add Connect Mobile App action
+    #         connect_action = QtWidgets.QAction("Connect Mobile App", self)
+    #         connect_action.triggered.connect(self.show_mobile_connection_dialog)
+    #         mobile_menu.addAction(connect_action)
             
-            # Add separator
-            mobile_menu.addSeparator()
+    #         # Add separator
+    #         mobile_menu.addSeparator()
             
-            # Add Mobile Help action  
-            mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
-            mobile_help_action.triggered.connect(show_mobile_help)
-            mobile_menu.addAction(mobile_help_action)
+    #         # Add Mobile Help action  
+    #         mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
+    #         mobile_help_action.triggered.connect(show_mobile_help)
+    #         mobile_menu.addAction(mobile_help_action)
             
-        except Exception as e:
-            print(f"Error creating mobile menu: {e}")
+    #     except Exception as e:
+    #         print(f"Error creating mobile menu: {e}")
 
-    def handle_mobile_alert(self, alert_type, message):
-        """Send alert to mobile devices"""
-        if hasattr(self, 'mobile_server_manager'):
-            print(f"Sending alert to mobile: {alert_type} - {message}")
-            self.mobile_server_manager.send_alert(alert_type, message)
+    # def handle_mobile_alert(self, alert_type, message):
+    #     """Send alert to mobile devices"""
+    #     if hasattr(self, 'mobile_server_manager'):
+    #         print(f"Sending alert to mobile: {alert_type} - {message}")
+    #         self.mobile_server_manager.send_alert(alert_type, message)
     
     def on_resize(self, event):
         """Handle window resize events"""

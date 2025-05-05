@@ -21,11 +21,9 @@ from pages.styles import DarkThemeStyle
 from pages import (
     DarkThemeStyle,
     ToddlerMonitoringSystem,
-    show_mobile_help,
     DarkThemeStyle
 )
 from integration import (
-    integrate_mobile_app,
     integrate_geofence,
     HAZARDOUS_OBJECTS
 )
@@ -133,9 +131,6 @@ def main():
         
         # Integrate geofence functionality
         geofence_manager = integrate_geofence(main_window)
-
-        # Integrate mobile app functionality
-        mobile_server = integrate_mobile_app(main_window)
 
         # Show the main window
         main_window.show()

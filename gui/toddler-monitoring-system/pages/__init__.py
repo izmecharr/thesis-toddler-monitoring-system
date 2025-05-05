@@ -11,7 +11,7 @@ from .mainPage import (
 
 from .aboutPage import AboutDialog
 from .helpPage import HelpDialog
-from .mobileHelpPage import show_mobile_help
+# from .mobileHelpPage import show_mobile_help
 # from .mobileQrPage import (
 #     QRScanPage,
 #     AlertPage,
@@ -30,10 +30,5 @@ __all__ = [
     'NotificationManager',
     'AboutDialog',
     'HelpDialog',
-    'show_mobile_help',
-    'QRScanPage',
-    'AlertPage',
-    'NetworkClient',
-    'ToddlerAlarmApp',
     # Remove 'main' and 'app_show_mobile_help' from __all__
 ]

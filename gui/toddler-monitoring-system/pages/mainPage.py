@@ -602,8 +602,9 @@ class Ui_MainWindow(object):
                     # Get the first result (assuming single image input)
                     result = results[0]
                     
-                    # Initialize lists to track toddlers and other objects
+                    # Initialize lists to track people separately
                     toddlers = []
+                    persons = []
                     other_objects = []
                     
                     # Get bounding boxes, confidence scores and class names
@@ -638,16 +639,18 @@ class Ui_MainWindow(object):
                                     geofence_status = " [Outside]"
                                     is_inside_geofence = False
                         
-                        # MODIFIED: Check if detection is a person/toddler with good confidence
+                        # Check if detection is a person/toddler with good confidence
                         if conf > 0.50:
                             # Check if it's a person or toddler
                             if cls_name in ['person', 'toddler']:
-                                # Store toddler detection
+                                # Store width for both
                                 width = x2 - x1
-                                toddlers.append((x1, y1, x2, y2, width))
                                 
-                                # MODIFIED: Add color differentiation for person vs toddler
+                                # Add color differentiation for person vs toddler
                                 if cls_name == 'person':
+                                    # Store as person
+                                    persons.append((x1, y1, x2, y2, width))
+                                    
                                     if is_inside_geofence:
                                         # Bright purple for persons inside geofence
                                         person_box_color = (255, 0, 255)  # BGR: Magenta/Bright purple
@@ -655,6 +658,9 @@ class Ui_MainWindow(object):
                                         # Dark purple for persons outside geofence
                                         person_box_color = (128, 0, 128)  # BGR: Purple
                                 else:  # toddler
+                                    # Store as toddler
+                                    toddlers.append((x1, y1, x2, y2, width))
+                                    
                                     if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
                                         # Orange for toddlers outside geofence
                                         person_box_color = (0, 165, 255)  # BGR: Orange
@@ -681,7 +687,7 @@ class Ui_MainWindow(object):
                                 # Store other detected objects
                                 other_objects.append((cls_name, x1, y1, x2, y2, conf))
                                 
-                                # MODIFIED: Determine box color based on hazardous status and geofence position
+                                # Determine box color based on hazardous status and geofence position
                                 if is_hazardous and is_inside_geofence:
                                     # Red color for hazardous objects inside geofence
                                     box_color = (255, 0, 0)  # BGR: Red
@@ -700,10 +706,10 @@ class Ui_MainWindow(object):
                                 cv2.putText(frame_rgb, label, (x1, y1-10), 
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
                     
-                    # Store detected toddlers
+                    # Store only toddlers for distance calculations
                     self._detected_toddlers = toddlers
                     
-                    # Check for distance between toddlers and other objects
+                    # Check for distance between ONLY toddlers and other objects (not persons)
                     if len(toddlers) > 0 and len(other_objects) > 0:
                         for tx1, ty1, tx2, ty2, t_width in toddlers:
                             # Calculate toddler center point
@@ -741,7 +747,7 @@ class Ui_MainWindow(object):
                                         cv2.putText(frame_rgb, dist_label, (mid_x, mid_y), 
                                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
                                 
-                                # MODIFIED: Check object's geofence status before alerting
+                                # Check object's geofence status before alerting
                                 object_inside_geofence = False
                                 if hasattr(self.main_window, 'geofence_integration'):
                                     geofence_manager = self.main_window.geofence_integration
@@ -770,7 +776,7 @@ class Ui_MainWindow(object):
                             non_hazardous_objects.append(obj_name)
 
                     # Create status bar message with separate counts
-                    status_text = f"Update: Toddler(s): {len(toddlers)} | Non-hazardous objects: {len(non_hazardous_objects)} | Hazardous Objects: "
+                    status_text = f"Update: Toddler(s): {len(toddlers)} | Person(s): {len(persons)} | Non-hazardous objects: {len(non_hazardous_objects)} | Hazardous Objects: "
 
                     # Add hazards if any detected
                     if hazardous_objects:

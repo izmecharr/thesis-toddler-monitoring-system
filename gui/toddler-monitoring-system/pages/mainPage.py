@@ -624,7 +624,7 @@ class Ui_MainWindow(object):
                         
                         # Check if object is inside any geofence
                         geofence_status = ""
-                        geofence_color_suffix = ""
+                        is_inside_geofence = False
                         
                         # Check if geofence manager exists and has active geofences
                         if hasattr(self.main_window, 'geofence_integration'):
@@ -633,10 +633,10 @@ class Ui_MainWindow(object):
                                 # Check if point is inside the active geofence
                                 if geofence_manager.point_in_polygon(center_x, center_y, geofence_manager.saved_geofence):
                                     geofence_status = " [Inside]"
-                                    geofence_color_suffix = " ✓"  # Add checkmark for objects inside
+                                    is_inside_geofence = True
                                 else:
                                     geofence_status = " [Outside]"
-                                    geofence_color_suffix = " ✗"  # Add cross for objects outside
+                                    is_inside_geofence = False
                         
                         # Check if detection is a toddler/child/person with good confidence
                         if cls_name in ['person','toddler'] and conf > 0.50:
@@ -659,15 +659,19 @@ class Ui_MainWindow(object):
                             # Store other detected objects
                             other_objects.append((cls_name, x1, y1, x2, y2, conf))
                             
-                            # Draw bounding box with different colors based on hazard status
-                            if is_hazardous:
-                                # Red color for hazardous objects
+                            # MODIFIED: Determine box color based on hazardous status and geofence position
+                            if is_hazardous and is_inside_geofence:
+                                # Red color for hazardous objects inside geofence
                                 box_color = (255, 0, 0)  # BGR: Red
-                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
-                            else:
-                                # Blue color for non-hazardous objects
+                            elif is_hazardous and not is_inside_geofence:
+                                # Blue color for hazardous objects outside geofence
                                 box_color = (0, 0, 255)  # BGR: Blue
-                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
+                            else:
+                                # Default blue color for non-hazardous objects
+                                box_color = (0, 0, 255)  # BGR: Blue
+                            
+                            # Create label with geofence status
+                            label = f"{geofence_status} {cls_name}: {conf:.2f}"
                             
                             # Draw the box and label
                             cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)

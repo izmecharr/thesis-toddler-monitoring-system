@@ -644,13 +644,24 @@ class Ui_MainWindow(object):
                             width = x2 - x1
                             toddlers.append((x1, y1, x2, y2, width))
                             
-                            # Draw bounding box for toddler
-                            cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            # ADD THIS: Check if toddler is outside geofence
+                            if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
+                                # Change box color to orange/yellow for toddlers outside geofence
+                                toddler_box_color = (0, 165, 255)  # BGR: Orange
+                                
+                                # Show alert for toddler outside geofence
+                                self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
+                                self.play_alarm_sound()
+                            else:
+                                toddler_box_color = (0, 255, 0)  # BGR: Green
+                            
+                            # Draw bounding box for toddler with appropriate color
+                            cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), toddler_box_color, 2)
                             
                             # Add label with confidence and geofence status
                             label = f"{geofence_status} {cls_name}: {conf:.2f}"
                             cv2.putText(frame_rgb, label, (x1, y1-10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, toddler_box_color, 2)
                             
                         elif conf > 0.50:
                             # Determine if the object is hazardous

@@ -86,16 +86,17 @@ def train_enhanced_yolov8(
         "project": "enhanced_yolov8",
         "name": run_name if run_name else f"enhanced_{size}",
         "lr0": learning_rate,
-        "lrf": 0.00001,
+        "lrf": 0.0000005,
         "momentum": 0.937,
         "weight_decay": weight_decay,
+        "mixup": 0.9,
         "warmup_epochs": warmup_epochs,
         "warmup_momentum": 0.8,
         "warmup_bias_lr": 0.1,
         "box": 7.5,
         "cls": 0.5,
         "dfl": 1.5,
-        "dropout": 0.05,
+        "dropout": 0.9,
         "max_det": 300,
         "iou": 0.6,
     }
@@ -232,9 +233,9 @@ def continue_training(
         "cls": 0.5,
         "dfl": 1.0,
         "mosaic": 0.5,
-        "mixup": 0.05,
+        "mixup": 0.5,
         "copy_paste": 0.1,
-        "dropout": 0.05,
+        "dropout": 0.9,
         "scale": 0.8,
         "max_det": 300,
         "iou": 0.6,
@@ -350,14 +351,14 @@ def main():
                 data_yaml_path=data_yaml_path,
                 size='n',
                 pretrained=True,
-                epochs=20,          # More epochs for better convergence
+                epochs=9,          # More epochs for better convergence
                 batch_size=32,
                 imgsz=640,
                 workers=4,
                 device=None,
                 amp=True,
                 run_name=run_name,
-                learning_rate=0.000001,  # Lower learning rate
+                learning_rate=0.0000001,  # Lower learning rate
                 warmup_epochs=5        # Warmup period
             )
         elif train_option == "2":

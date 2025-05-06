@@ -21,13 +21,11 @@ def select_device(device_name=None):
             print(f"Selected {device_name} (CUDA:{i})")
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{i}"
             print(f"Set CUDA_VISIBLE_DEVICES={i}, GPU is now accessible as device 0")
-            return "0"
             return f"cuda:0"  # Changed from "0" to "cuda:0"
     
     # If no specified device found or no device name provided, use the first GPU
     if torch.cuda.device_count() > 0:
         print(f"No specific GPU selected. Using first available GPU: {torch.cuda.get_device_name(0)}")
-        return "0"
         return "cuda:0"  # Changed from "0" to "cuda:0"
         
     print("No GPU found. Using CPU")
@@ -86,11 +84,9 @@ def train_enhanced_yolov8(
         "project": "enhanced_yolov8",
         "name": run_name if run_name else f"enhanced_{size}",
         "lr0": learning_rate,
-        "lrf": 0.0000005,
         "lrf": 0.00005,
         "momentum": 0.937,
         "weight_decay": weight_decay,
-        "mixup": 0.9,
         "optimizer": "AdamW",
         "mixup": 0.5,
         "warmup_epochs": warmup_epochs,

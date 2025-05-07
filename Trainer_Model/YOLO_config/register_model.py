@@ -1,112 +1,88 @@
-#!/usr/bin/env python3
-# Register custom YOLOv8 model
-# Save this as register_model.py
-
+#register_model.py
 import os
 import sys
 from pathlib import Path
-import torch
 
 # Add the current directory to path to find custom modules
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
 
-# Import the custom modules
+# Import custom modules FIRST, before importing YOLO
 from custom_modules import GroupNormConv, ResidualC2f, SmallObjectEnhance
 
-# Import Ultralytics
+# Now import Ultralytics
 from ultralytics import YOLO
 
 def register_custom_model(config_path='yolov8_custom.yaml'):
+    """
+    Register the custom model with Ultralytics
     
+    Args:
+        config_path: Path to the custom YAML config file
+    
+    Returns:
+        YOLO model with custom architecture
+    """
+    # Make sure the YAML config exists
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
     
+    # THIS IS CRITICAL - Register the custom modules with Ultralytics BEFORE creating the model
+    # We need to make our custom modules available in the modules where YOLO will look for them
     
-    from ultralytics.nn.tasks import attempt_load_weights
+    # First try the nn.modules namespace (this is the most common location)
+    try:
+        import ultralytics.nn.modules
+        setattr(ultralytics.nn.modules, 'GroupNormConv', GroupNormConv)
+        setattr(ultralytics.nn.modules, 'ResidualC2f', ResidualC2f)
+        setattr(ultralytics.nn.modules, 'SmallObjectEnhance', SmallObjectEnhance)
+        print("Registered custom modules in ultralytics.nn.modules")
+    except ImportError:
+        print("Could not import ultralytics.nn.modules")
     
+    # Also try registering in the global namespace as a backup
+    globals()['GroupNormConv'] = GroupNormConv
+    globals()['ResidualC2f'] = ResidualC2f
+    globals()['SmallObjectEnhance'] = SmallObjectEnhance
     
-    setattr(sys.modules['ultralytics.nn.modules'], 'GroupNormConv', GroupNormConv)
-    setattr(sys.modules['ultralytics.nn.modules'], 'ResidualC2f', ResidualC2f)
-    setattr(sys.modules['ultralytics.nn.modules'], 'SmallObjectEnhance', SmallObjectEnhance)
+    # Also make them available in common module locations used by YOLO
+    sys.modules['models.common.GroupNormConv'] = GroupNormConv
+    sys.modules['models.common.ResidualC2f'] = ResidualC2f
+    sys.modules['models.common.SmallObjectEnhance'] = SmallObjectEnhance
     
-    
-    model = YOLO(config_path)
-    
-    print(f"Custom YOLOv8 model registered successfully with modified backbone:")
-    print(f" - Added ResidualC2f after the first C2f block")
-    print(f" - Added SmallObjectEnhance after the second C2f block")
-    print(f" - Added ResidualC2f after the third C2f block")
-    print(f" - All custom modules use GroupNormConv for improved small batch training")
-    
-    return model
+    # Now try to create the model
+    try:
+        model = YOLO(config_path)
+        print(f"Custom YOLOv8 model registered successfully with modified backbone:")
+        print(f" - Added ResidualC2f after the first C2f block")
+        print(f" - Added SmallObjectEnhance after the second C2f block")
+        print(f" - Added ResidualC2f after the third C2f block")
+        return model
+    except Exception as e:
+        print(f"Error creating model: {str(e)}")
+        # Debug information to help identify where modules are expected
+        print("\nDebugging module paths:")
+        print(f"Current directory: {os.getcwd()}")
+        print(f"Python path: {sys.path}")
+        raise
+
 
 if __name__ == "__main__":
-    # Example usage
-    
-    # 1. Save the YAML configuration to a file
-    config_content = """
-# YOLOv8 Custom Architecture Configuration
-# Modified with GroupNormConv, ResidualC2f, and SmallObjectEnhance modules
-
-# Parameters
-nc: 80  # number of classes
-depth_multiple: 1.0  # model depth multiplier
-width_multiple: 1.0  # layer channel multiplier
-
-# Anchors
-anchors:
-  - [10,13, 16,30, 33,23]  # P3/8
-  - [30,61, 62,45, 59,119]  # P4/16
-  - [116,90, 156,198, 373,326]  # P5/32
-
-# YOLOv8 backbone
-backbone:
-  # [from, number, module, args]
-  [[-1, 1, Conv, [64, 3, 2]],  # 0-P1/2
-   [-1, 1, Conv, [128, 3, 2]],  # 1-P2/4
-   [-1, 3, C2f, [128]],         # 2-Standard C2f
-   [-1, 1, ResidualC2f, [128]], # 3-Added ResidualC2f after first C2f
-   [-1, 1, Conv, [256, 3, 2]],  # 4-P3/8
-   [-1, 6, C2f, [256]],         # 5-Standard C2f
-   [-1, 1, SmallObjectEnhance, [256]],  # 6-Added SmallObjectEnhance after second C2f
-   [-1, 1, Conv, [512, 3, 2]],  # 7-P4/16
-   [-1, 6, C2f, [512]],         # 8-Standard C2f
-   [-1, 1, ResidualC2f, [512]], # 9-Added ResidualC2f after third C2f
-   [-1, 1, Conv, [1024, 3, 2]], # 10-P5/32
-   [-1, 3, C2f, [1024]],        # 11-Standard C2f for remaining
-   [-1, 1, SPPF, [1024, 5]],    # 12
-  ]
-
-# YOLOv8 head
-head:
-  [[-1, 1, nn.Upsample, [None, 2, 'nearest']],
-   [[-1, 9], 1, Concat, [1]],  # cat backbone P4
-   [-1, 3, C2f, [512]],  # 15
-   
-   [-1, 1, nn.Upsample, [None, 2, 'nearest']],
-   [[-1, 6], 1, Concat, [1]],  # cat backbone P3
-   [-1, 3, C2f, [256]],  # 18
-   
-   [-1, 1, Conv, [256, 3, 2]],
-   [[-1, 15], 1, Concat, [1]],  # cat head P4
-   [-1, 3, C2f, [512]],  # 21
-   
-   [-1, 1, Conv, [512, 3, 2]],
-   [[-1, 12], 1, Concat, [1]],  # cat head P5
-   [-1, 3, C2f, [1024]],  # 24
-   
-   [[18, 21, 24], 1, Detect, [nc]],  # Detect(P3, P4, P5)
-  ]
-"""
-    config_path = 'yolov8_custom.yaml'
+    # Check if the config file exists
+    config_path = 'E:\\Mika Thesis (dontdeleteyet)\\thesis-toddler-monitoring-system\\Trainer_Model\\YOLO_config\\yolov8_custom.yaml'
+    if len(sys.argv) > 1:
+        config_path = sys.argv[1]
     
     if not os.path.exists(config_path):
-        print(f"Config file {config_path} not found. Creating it...")
-        with open(config_path, 'w') as f:
-            f.write(config_content)
-        print(f"Created config file at {config_path}")
-    else:
-        print(f"Using existing config file: {config_path}")
-    
-    model = register_custom_model(config_path)
-    
+        print(f"Config file {config_path} not found.")
+        print("Please provide the path to your YAML configuration file.")
+        sys.exit(1)
+        
+    # Register the custom model
+    try:
+        model = register_custom_model(config_path)
+        print("Model created successfully!")
+    except Exception as e:
+        print(f"Failed to create model: {str(e)}")
+        import traceback
+        traceback.print_exc()

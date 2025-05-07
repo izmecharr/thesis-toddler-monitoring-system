@@ -13,11 +13,11 @@ def train_yolov8():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
     
     # Load a pretrained YOLOv8 model
-    model = YOLO('yolov8n.pt')  # You can also use s, m, l, or x variants
+    model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\yolo11n.pt')  # You can also use s, m, l, or x variants
     
     # Train the model on your custom dataset
     results = model.train(
-        data='C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\baby\\data.yaml',  # Path to your data.yaml file
+        data='C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\yolov11-dataset\\data.yaml',  # Path to your data.yaml file
         epochs=20,                      # Number of training epochs
         imgsz=640,                      # Image size
         batch=16,                       # Batch size (adjust based on your GPU memory)
@@ -28,8 +28,8 @@ def train_yolov8():
         patience=15,                    # Early stopping patience
         cache='disk',                      # Cache images for faster training
         amp=False,
-        lr0=0.01,  # Increase from 0.0000001 (standard range is 0.01-0.001)
-        lrf=0.001,
+        lr0=0.001,  # Increase from 0.0000001 (standard range is 0.01-0.001)
+        lrf=0.01,
         warmup_epochs=5,
         weight_decay=0.005,
         workers=4

@@ -17,7 +17,7 @@ def train_yolov8():
     
     # Train the model on your custom dataset
     results = model.train(
-        data='C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\yolov11-dataset\\data.yaml',  # Path to your data.yaml file
+        data='C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\Thesis_Assets\\data\\person-only-yolov11\\data.yaml',  # Path to your data.yaml file
         epochs=20,                      # Number of training epochs
         imgsz=640,                      # Image size
         batch=16,                       # Batch size (adjust based on your GPU memory)

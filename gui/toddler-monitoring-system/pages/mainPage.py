@@ -892,6 +892,8 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
             
             # Create new Mobile menu
             mobile_menu = QtWidgets.QMenu("Mobile", self)
+            # Apply the dark theme style from styles.py
+            mobile_menu.setStyleSheet(DarkThemeStyle.MENU_STYLE)
             self.ui.menubar.addMenu(mobile_menu)
             
             # Add Connect Mobile App action
@@ -911,7 +913,7 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
             
         except Exception as e:
             print(f"Error creating mobile menu: {e}")
-
+            
     def handle_mobile_alert(self, alert_type, message):
         """Send alert to mobile devices"""
         if hasattr(self, 'mobile_server_manager'):

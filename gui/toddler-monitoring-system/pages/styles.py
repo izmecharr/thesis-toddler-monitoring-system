@@ -230,6 +230,7 @@ class DarkThemeStyle:
         QMenuBar::item {{
             background: transparent;
             padding: 5px 10px;
+            color: {TEXT_PRIMARY};
         }}
         QMenuBar::item:selected {{
             background: {PRIMARY_COLOR};
@@ -244,6 +245,7 @@ class DarkThemeStyle:
         QMenu::item {{
             padding: 5px 30px 5px 20px;
             border: 1px solid transparent;
+            color: {TEXT_PRIMARY};
         }}
         QMenu::item:selected {{
             background-color: {PRIMARY_COLOR};

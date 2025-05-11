@@ -851,7 +851,7 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         # Connect resize event
         self.resizeEvent = self.on_resize
         
-        # Connect the About menu action
+                # Connect the About menu action
         self.ui.actionAbout.triggered.connect(self.show_about_dialog)   
             
         # Connect Help menu actions
@@ -859,16 +859,17 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         self.ui.actionFAQs.triggered.connect(self.show_faqs)
         self.ui.actionAbout.triggered.connect(self.show_about_dialog)
         
-        # ADD THIS CODE HERE - Add menu item to help menu for mobile app connection
-        if hasattr(self, 'ui') and hasattr(self.ui, 'menuHelp'):
-            # Add separator before mobile options
-            self.ui.menuHelp.addSeparator()
-            
-            # Add Mobile App Help action
-            mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
-            mobile_help_action.triggered.connect(show_mobile_help)
-            self.ui.menuHelp.addAction(mobile_help_action)
-
+        # Initialize mobile app integration
+        integrate_mobile_app(self)
+        
+        # Check if Mobile menu already exists before adding it
+        if not hasattr(self, '_mobile_menu_added'):
+            self.add_mobile_connection_menu()
+            self._mobile_menu_added = True
+        
+        # Add method to send alerts to mobile
+        self.send_mobile_alert = self.handle_mobile_alert
+    
     def add_mobile_connection_menu(self):
         """Add menu item for mobile connection"""
         try:
@@ -910,7 +911,13 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
             
         except Exception as e:
             print(f"Error creating mobile menu: {e}")
-            
+
+    def handle_mobile_alert(self, alert_type, message):
+        """Send alert to mobile devices"""
+        if hasattr(self, 'mobile_server_manager'):
+            print(f"Sending alert to mobile: {alert_type} - {message}")
+            self.mobile_server_manager.send_alert(alert_type, message)
+
     def on_resize(self, event):
         """Handle window resize events"""
         # Make sure camera view is updated if there's a pixmap

@@ -268,9 +268,85 @@ class EnhancedYOLOv8(nn.Module):
     
     # UPDATED: Fixed forward method to accept all arguments and pass them directly
     def forward(self, *args, **kwargs):
-        """Forward pass - delegates to base model with hooks for modifications."""
-        # Simply pass all arguments directly to the base model
-        return self.base_model(*args, **kwargs)
+        """Forward pass that returns Results objects."""
+        # Get raw outputs from base model (with hooks for our enhanced layers)
+        outputs = self.base_model(*args, **kwargs)
+        
+        # If outputs are in tuple format, convert to Results
+        if isinstance(outputs, tuple):
+            try:
+                from ultralytics.engine.results import Results
+                from ultralytics.utils.ops import non_max_suppression
+                import inspect
+                import torch
+                
+                # Get original image
+                original_img = args[0] if len(args) > 0 else kwargs.get('images', None)
+                
+                # CRITICAL: Process through NMS first
+                # First element of outputs contains predictions
+                preds = outputs[0]
+                
+                # Apply non-maximum suppression
+                # If preds has shape [batch, anchors, classes+5]
+                if len(preds.shape) == 3:
+                    # Process through NMS to get final detections
+                    # Default parameters: conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, multi_label=False
+                    nms_preds = non_max_suppression(preds, 0.25, 0.45)
+                    
+                    # non_max_suppression returns a list of tensors, but Results expects a tensor
+                    # For a single image, we can take the first element
+                    if len(nms_preds) > 0 and len(nms_preds[0]) > 0:
+                        # Convert to tensor if it's a list
+                        if isinstance(nms_preds[0], list):
+                            boxes_tensor = torch.tensor(nms_preds[0])
+                        else:
+                            # It's already a tensor
+                            boxes_tensor = nms_preds[0]
+                    else:
+                        # No detections, create an empty tensor with the right shape
+                        boxes_tensor = torch.zeros((0, 6), device=preds.device)
+                else:
+                    # Already in the right format
+                    boxes_tensor = preds
+                
+                # Create Results object
+                if isinstance(original_img, torch.Tensor):
+                    img = original_img[0] if original_img.shape[0] == 1 else original_img
+                else:
+                    img = original_img
+                    
+                # Create a parameters dictionary with only compatible parameters
+                results_params = {
+                    'orig_img': img,       # Original image
+                    'names': self.names,   # Class names
+                    'boxes': boxes_tensor, # Detection boxes (now as a tensor)
+                }
+                
+                # Add path parameter
+                results_params['path'] = None
+                    
+                # Create Results object with compatible parameters
+                results = Results(**results_params)
+                
+                return results
+            except Exception as e:
+                import traceback
+                print(f"Warning: Error creating Results object: {e}")
+                traceback.print_exc()
+                
+                # If all else fails, try to use the model's predict method directly
+                if hasattr(self.base_model, 'predict'):
+                    try:
+                        print("Falling back to base_model.predict()...")
+                        return self.base_model.predict(*args, **kwargs)
+                    except Exception as pred_error:
+                        print(f"Error with base_model.predict(): {pred_error}")
+                
+                return outputs
+        
+        # Return outputs directly if already in correct format
+        return outputs
     
     def eval(self):
         """Switch to evaluation mode."""
@@ -320,10 +396,63 @@ class EnhancedYOLOv8(nn.Module):
         raise NotImplementedError("Base model does not have a predict method")
     
     def val(self, *args, **kwargs):
-        """Validation method that delegates to base model."""
-        if hasattr(self.base_model, 'val'):
-            return self.base_model.val(*args, **kwargs)
-        raise NotImplementedError("Base model does not have a val method")
+        try:
+            from ultralytics import YOLO
+            import tempfile
+            import os
+            
+            print("Using YOLO class for validation...")
+            
+            # Create a temporary file to save our model
+            with tempfile.NamedTemporaryFile(suffix='.pt', delete=False) as tmp:
+                temp_path = tmp.name
+            
+            # Save using our normal save function
+            save_for_validation(self, temp_path)
+            print(f"Saved temporary model to {temp_path}")
+            
+            # Use YOLO's built-in validation which knows how to handle different model formats
+            results = None
+            
+            try:
+                # Try standard validation directly with the file path
+                print("Attempting validation with YOLO's standard approach...")
+                yolo = YOLO(temp_path)
+                results = yolo.val(*args, **kwargs)
+            except Exception as e:
+                print(f"Standard YOLO validation failed: {e}")
+                print("Falling back to direct validation of the loaded model...")
+                
+                # If that fails, run the validation on our model directly
+                from ultralytics.engine.validator import DetectionValidator
+                
+                # Create a validator directly
+                validator = DetectionValidator(args=kwargs.get('args', None))
+                
+                # Set our model
+                validator.model = self
+                
+                # Explicitly set the data
+                if 'data' in kwargs:
+                    validator.data = kwargs['data']
+                    
+                # Run validation
+                metrics = validator.validate()
+                results = metrics
+            
+            # Clean up the temporary file
+            try:
+                os.unlink(temp_path)
+                print(f"Removed temporary model file {temp_path}")
+            except Exception as e:
+                print(f"Warning: Could not remove temporary file {temp_path}: {e}")
+            
+            return results
+        except Exception as e:
+            print(f"YOLO validation error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
 # Add a new custom loader function to replace attempt_load_one_weight
 def attempt_load_enhanced_model(model, device=''):
@@ -453,8 +582,14 @@ class EnhancedModelWrapper(torch.nn.Module):
         self.is_enhanced_wrapper = True
     
     def forward(self, *args, **kwargs):
-        """Forward pass - delegates to the enhanced model."""
-        return self.model(*args, **kwargs)
+        """Move model to device."""
+        # Move the underlying model first
+        self.model.to(*args, **kwargs)
+        
+        # Then move any parameters owned by this wrapper
+        super().to(*args, **kwargs)
+        
+        return self
     
     def to(self, *args, **kwargs):
         """Move model to device."""
@@ -502,6 +637,16 @@ class EnhancedModelWrapper(torch.nn.Module):
         if name in ['model', 'is_enhanced_wrapper'] or name.startswith('__'):
             return super().__getattr__(name)
         return getattr(self.model, name)
+    
+    def val(self, *args, **kwargs):
+        try:
+            # Just delegate to the model's val method which now uses YOLO
+            return self.model.val(*args, **kwargs)
+        except Exception as e:
+            print(f"Wrapper validation error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 def create_enhanced_yolov8(size='n', pretrained=True):
     """
@@ -547,20 +692,46 @@ def save_model_with_yaml(model, path):
     torch.save(save_dict, path)
     print(f"Model saved to {path}")
 
-def load_model_with_yaml(path, wrap_for_training=True):
+def save_for_validation(model, path):
+    """Save the model in a format compatible with validation using state_dict."""
+    # If it's a wrapper, get the actual model
+    if hasattr(model, 'is_enhanced_wrapper') and model.is_enhanced_wrapper:
+        model = model.model
+    
+    # Save just the state dictionaries, not the hooks
+    save_dict = {
+        'model': model.state_dict(),
+        'base_model': model.base_model.state_dict() if hasattr(model, 'base_model') else None,
+        'yaml': model.yaml if hasattr(model, 'yaml') else None,
+        'names': model.names if hasattr(model, 'names') else None,
+        'stride': model.stride if hasattr(model, 'stride') else None,
+        'custom_modules': {name: module.state_dict() for name, module in 
+                          model.custom_modules.items()} if hasattr(model, 'custom_modules') else None,
+        'channel_sizes': model.channel_sizes if hasattr(model, 'channel_sizes') else None,
+        'c2f_indices': model.c2f_indices if hasattr(model, 'c2f_indices') else None
+    }
+    
+    # Save the dictionary
+    torch.save(save_dict, path)
+    print(f"Model saved for validation to {path}")    
+
+def load_model_with_yaml(path, wrap_for_training=True,device='cpu'):
     """Load enhanced model from saved state."""
+    # Ensure device is a proper PyTorch device string
+    device = str(device)  # Convert to string in case we get a torch.device object
+    
     # Load the saved state
     data = torch.load(path, map_location='cpu')
     
-    # Determine model size from parameter count or filename
+    # Determine model size from filename
     size = 'n'  # Default to nano
-    if 'yolov8s' in path.lower():
+    if 'yolov8s' in str(path).lower():
         size = 's'
-    elif 'yolov8m' in path.lower():
+    elif 'yolov8m' in str(path).lower():
         size = 'm'
-    elif 'yolov8l' in path.lower():
+    elif 'yolov8l' in str(path).lower():
         size = 'l'
-    elif 'yolov8x' in path.lower():
+    elif 'yolov8x' in str(path).lower():
         size = 'x'
     
     # Create a new model instance
@@ -612,8 +783,13 @@ def load_model_with_yaml(path, wrap_for_training=True):
     # Ensure model is in eval mode after loading
     model.eval()
     
+    # Move model to specified device
+    model.to(device)
+    
     # Wrap the model if requested (for training compatibility)
     if wrap_for_training:
-        return EnhancedModelWrapper(model)
+        wrapped_model = EnhancedModelWrapper(model)
+        wrapped_model.to(device)  # Make sure wrapped model is also on the right device
+        return wrapped_model
     else:
         return model

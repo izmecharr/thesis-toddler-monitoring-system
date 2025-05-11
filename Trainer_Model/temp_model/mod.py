@@ -1,3 +1,4 @@
+#mod.py
 import os
 import torch
 import yaml
@@ -20,12 +21,12 @@ def select_device(device_name=None):
             print(f"Selected {device_name} (CUDA:{i})")
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{i}"
             print(f"Set CUDA_VISIBLE_DEVICES={i}, GPU is now accessible as device 0")
-            return "0"
+            return f"cuda:0"  # Changed from "0" to "cuda:0"
     
     # If no specified device found or no device name provided, use the first GPU
     if torch.cuda.device_count() > 0:
         print(f"No specific GPU selected. Using first available GPU: {torch.cuda.get_device_name(0)}")
-        return "0"
+        return "cuda:0"  # Changed from "0" to "cuda:0"
         
     print("No GPU found. Using CPU")
     return 'cpu'
@@ -48,9 +49,6 @@ def train_enhanced_yolov8(
     warmup_epochs=5,
     weight_decay=0.005
 ):
-    """
-    Train an enhanced YOLOv8 model directly using YOLO's training pipeline.
-    """
     if device is None:
         device = select_device()
     
@@ -86,16 +84,18 @@ def train_enhanced_yolov8(
         "project": "enhanced_yolov8",
         "name": run_name if run_name else f"enhanced_{size}",
         "lr0": learning_rate,
-        "lrf": 0.00001,
+        "lrf": 0.00005,
         "momentum": 0.937,
         "weight_decay": weight_decay,
+        "optimizer": "AdamW",
+        "mixup": 0.5,
         "warmup_epochs": warmup_epochs,
         "warmup_momentum": 0.8,
         "warmup_bias_lr": 0.1,
         "box": 7.5,
         "cls": 0.5,
         "dfl": 1.5,
-        "dropout": 0.05,
+        "dropout": 0.9,
         "max_det": 300,
         "iou": 0.6,
     }
@@ -232,9 +232,9 @@ def continue_training(
         "cls": 0.5,
         "dfl": 1.0,
         "mosaic": 0.5,
-        "mixup": 0.05,
+        "mixup": 0.5,
         "copy_paste": 0.1,
-        "dropout": 0.05,
+        "dropout": 0.9,
         "scale": 0.8,
         "max_det": 300,
         "iou": 0.6,
@@ -350,10 +350,10 @@ def main():
                 data_yaml_path=data_yaml_path,
                 size='n',
                 pretrained=True,
-                epochs=20,          # More epochs for better convergence
-                batch_size=32,
+                epochs=18,     # More epochs for better convergence
+                batch_size=16,
                 imgsz=640,
-                workers=4,
+                workers=2,
                 device=None,
                 amp=True,
                 run_name=run_name,
@@ -387,17 +387,28 @@ def main():
             
             print("\nRunning validation on the trained model...")
             try:
-                # Load the enhanced model
-                trained_model = load_model_with_yaml(best_model_path)
+                # Get the device
+                device = select_device()
                 
-                # Try a simple validation using YOLO's val method
+                # Load the enhanced model with the selected device
+                trained_model = load_model_with_yaml(best_model_path, wrap_for_training=False, device=device)
+                
+                # Try a simple validation 
                 try:
-                    # Simple approach using YOLO
-                    yolo_model = YOLO(best_model_path)
-                    yolo_model.val(data=data_yaml_path)
+                    # Simple validation using the model's val method
+                    trained_model.val(data=data_yaml_path)
                 except Exception as ve:
-                    print(f"Standard validation failed: {ve}")
-                    print("Skipping validation - model was still trained successfully")
+                    print(f"Enhanced model validation failed: {ve}")
+                    print("Trying standard YOLO validation...")
+                    
+                    # Try standard validation as a fallback
+                    try:
+                        yolo_model = YOLO(best_model_path)
+                        yolo_model.val(data=data_yaml_path)
+                        print("Standard validation completed")
+                    except Exception as e:
+                        print(f"Standard validation failed: {e}")
+                        print("Skipping validation - model was still trained successfully")
             except Exception as e:
                 print(f"Error loading trained model: {e}")
         else:

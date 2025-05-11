@@ -1,394 +1,164 @@
-# test_enhanced_model.py
 import torch
-import time
-from collections import OrderedDict
-from modified_yolov8 import (
-    create_enhanced_yolov8, 
-    save_model_with_yaml, 
-    load_model_with_yaml,
-    SmallObjectEnhance,
-    ResidualC2f
-)
+import cv2
+import numpy as np
+import os
+from modified_yolov8 import load_model_with_yaml
+import inspect
 
-def analyze_model_structure(model):
-    """Analyze model structure and hook placement."""
-    print("\n=== Model Structure Analysis ===")
-    
-    # Count total parameters
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total parameters: {total_params:,}")
-    
-<<<<<<< HEAD
-<<<<<<< HEAD
-    # Check C2f indices and expected hook positions
-    if hasattr(model, 'c2f_indices'):
-        print(f"\nFound C2f blocks at indices: {model.c2f_indices}")
-        backbone_c2f = model.c2f_indices[:3]
-        print(f"Backbone C2f blocks: {backbone_c2f}")
-        
-        # Check expected hook positions
-        expected_hooks = {}
-        if len(backbone_c2f) >= 3:
-            expected_hooks[backbone_c2f[0]] = "ResidualC2f"
-            expected_hooks[backbone_c2f[1]] = "SmallObjectEnhance"
-            expected_hooks[backbone_c2f[2]] = "ResidualC2f"
-        
-        # Verify hooks are correctly placed
-        print("\nExpected hook placements:")
-        for idx, hook_type in expected_hooks.items():
-            print(f"  Layer {idx}: {hook_type}")
-    
-    # Check custom modules
-=======
-=======
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
-    # Look for custom backbone enhancements
-    if hasattr(model, 'backbone_enhancements'):
-        print("\nBackbone Enhancements:")
-        for pos_name, details in model.backbone_enhancements.items():
-            print(f"  - {pos_name}: {details['type']} after {details['position']} ({details['channels']} channels)")
-    
-    # Look for our custom modules
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
-    if hasattr(model, 'custom_modules'):
-        print("\nCustom modules found:")
-        for name, module in model.custom_modules.items():
-<<<<<<< HEAD
-<<<<<<< HEAD
-            param_count = sum(p.numel() for p in module.parameters())
-            print(f"  {name}: {type(module).__name__}, {param_count:,} parameters")
-    
-    return total_params
-
-def trace_backbone_enhancements(model):
-    """Trace the backbone enhancements by analyzing layers."""
-    print("\n=== Backbone Enhancement Analysis ===")
-    
-    if not hasattr(model, 'c2f_indices'):
-        print("No C2f indices found")
-        return
-    
-    backbone_c2f = model.c2f_indices[:3]
-    print(f"Analyzing backbone C2f blocks: {backbone_c2f}")
-    
-    hooks_found = []
-    for idx, layer in enumerate(model.base_model.model):
-        if idx in backbone_c2f:
-            hook_str = []
-            # Find which hook is registered for this layer
-            for hook_idx, hook_ref in enumerate(layer._forward_hooks.values()):
-                hook_func_name = getattr(hook_ref, '__name__', 'unknown')
-                hook_str.append(f"Hook {hook_idx}")
-            
-            hooks_found.append((idx, layer, hook_str))
-    
-    print("\nHook analysis:")
-    for idx, layer, hooks in hooks_found:
-        layer_type = type(layer).__name__
-        if hasattr(model, 'channel_sizes') and idx in model.channel_sizes:
-            channels = model.channel_sizes[idx]
-            print(f"  Layer {idx} ({layer_type}): {channels} channels, Hooks: {len(hooks)}")
-        else:
-            print(f"  Layer {idx} ({layer_type}): Hooks: {len(hooks)}")
-
-def test_forward_pass_with_hooks(model):
-    """Test forward pass and verify custom layers are called."""
-    print("\n=== Forward Pass Testing ===")
-    
-    # Add activation hooks to custom modules
-    activations = {}
-    hooks = []
-    
-    def get_activation(name):
-        def hook(module, input, output):
-            activations[name] = {
-                'shape': output.shape if hasattr(output, 'shape') else 'No shape',
-                'called': True
-            }
-        return hook
-    
-    # Hook custom modules
-    for name, module in model.custom_modules.items():
-        hook = module.register_forward_hook(get_activation(name))
-        hooks.append(hook)
-    
-    # Forward pass
+def test_forward_pass():
+    """Test a single forward pass of the enhanced YOLOv8 model and analyze its output."""
+    # Load the enhanced YOLOv8 model
+    print("Loading Enhanced YOLOv8 model...")
+    model_path = "models/enhanced_yolov8n_final.pt"
+    model = load_model_with_yaml(model_path, wrap_for_training=False)
     model.eval()
-    dummy_input = torch.randn(1, 3, 640, 640)
     
-    print(f"Running forward pass with input shape: {dummy_input.shape}")
+    # Set device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    model.to(device)
     
-    with torch.no_grad():
-        output = model(dummy_input)
-    
-    # Remove hooks
-    for hook in hooks:
-        hook.remove()
-    
-    # Check if custom modules were called
-    print("\nCustom module activation check:")
-    for name, info in activations.items():
-        called_status = "✓ Called" if info['called'] else "✗ Not called"
-        print(f"  {name}: {called_status}, Output shape: {info['shape']}")
-    
-    # Handle different output types
-    if isinstance(output, tuple):
-        print(f"\nOutput is a tuple with {len(output)} elements")
-        for i, out in enumerate(output):
-            if hasattr(out, 'shape'):
-                print(f"  Element {i} shape: {out.shape}")
-            else:
-                print(f"  Element {i} type: {type(out)}")
-    elif hasattr(output, 'shape'):
-        print(f"\nFinal output shape: {output.shape}")
-=======
-            module_type = type(module).__name__
-            print(f"  - {name}: {module_type}")
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
-=======
-            module_type = type(module).__name__
-            print(f"  - {name}: {module_type}")
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
-    else:
-        print(f"\nOutput type: {type(output)}")
-    
-<<<<<<< HEAD
-<<<<<<< HEAD
-    return activations
-
-def test_training_mode(model):
-    """Test training mode with custom enhancement."""
-    print("\n=== Training Mode Test ===")
-    
-    # Switch to training mode
-    model.train()
-    
-    # Create dummy batch
-    batch = {
-        'img': torch.randn(2, 3, 640, 640),  # Batch of 2 images
-        'cls': torch.randint(0, 80, (10,)),  # 10 objects total
-        'bboxes': torch.rand(10, 4),         # 10 bounding boxes
-        'batch_idx': torch.tensor([0]*5 + [1]*5),  # 5 objects per image
-        'gt_cls': torch.ones(1, 100)         # Ground truth classes
+    # Set your custom classes (for reference)
+    custom_classes = {
+        0: 'Coin',
+        1: 'Drink',
+        2: 'Fork',
+        3: 'Hammer',
+        4: 'Screwdriver',
+        5: 'Stapler',
+        6: 'sharp-item',
+        7: 'toddler'
     }
+    model.names = custom_classes
     
-    print("Testing training forward pass...")
-=======
-=======
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
-    # Test forward pass
-    print("\nTesting forward pass with dummy input...")
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
+    # Create a test image (random RGB tensor)
+    test_image = torch.rand(1, 3, 640, 640).to(device)
+    print(f"Created test image tensor: {test_image.shape}")
+    
+    # Display the current 'forward' method implementation for reference
+    print("\n" + "="*80)
+    print("CURRENT FORWARD METHOD IMPLEMENTATION:")
+    print("="*80)
     try:
-        output = model(batch)
-        
-        if isinstance(output, tuple) and len(output) == 2:
-            loss, loss_items = output
-            print(f"Loss: {loss:.6f}")
-            print(f"Loss components: {loss_items}")
-            print("✓ Training forward pass successful")
-        else:
-            print(f"Unexpected output type: {type(output)}")
-            print("✗ Training forward pass failed")
-    
+        forward_method = inspect.getsource(model.forward)
+        print(forward_method)
     except Exception as e:
-        print(f"Error in training mode: {e}")
-        import traceback
-        traceback.print_exc()
-
-def compare_with_standard(enhanced_model):
-    """Compare enhanced model with standard YOLOv8."""
-    print("\n=== Comparison with Standard YOLOv8 ===")
+        print(f"Could not get source code for forward method: {e}")
+        print("Default method is likely:")
+        print("""
+    def forward(self, *args, **kwargs):
+        # Simply pass all arguments directly to the base model
+        return self.base_model(*args, **kwargs)
+        """)
+    print("="*80 + "\n")
     
-    try:
-        from ultralytics import YOLO
-        standard_model = YOLO('yolov8n.pt').model
-        
-        # Parameter comparison
-        enhanced_params = sum(p.numel() for p in enhanced_model.parameters())
-        standard_params = sum(p.numel() for p in standard_model.parameters())
-        
-        print(f"Parameter count:")
-        print(f"  Enhanced model: {enhanced_params:,}")
-        print(f"  Standard model: {standard_params:,}")
-        print(f"  Increase: {((enhanced_params - standard_params) / standard_params) * 100:.1f}%")
-        
-        # Inference time comparison
-        dummy_input = torch.randn(1, 3, 640, 640)
-        
-        # Enhanced model timing
-        start_time = time.time()
-        with torch.no_grad():
-            enhanced_model.eval()
-            enhanced_output = enhanced_model(dummy_input)
-        enhanced_time = time.time() - start_time
-        
-<<<<<<< HEAD
-        # Standard model timing  
-        start_time = time.time()
-=======
-        if isinstance(output, torch.Tensor):
-            print(f"Forward pass successful! Output shape: {output.shape}")
-        else:
-            print(f"Forward pass successful! Output type: {type(output)}")
-            if hasattr(output, 'shape'):
-                print(f"Output shape: {output.shape}")
-        
-        print(f"Inference time: {(end_time - start_time)*1000:.2f} ms")
-    except Exception as e:
-        print(f"Error during forward pass: {e}")
-        import traceback
-        traceback.print_exc()
-
-def verify_backbone_enhancements(model):
-    """Verify that backbone enhancements are correctly placed."""
-    print("\n=== Verifying Backbone Enhancements ===")
+    # Test the base model output directly
+    print("Testing base_model output directly:")
+    with torch.no_grad():
+        try:
+            base_outputs = model.base_model(test_image)
+            print(f"Base model output type: {type(base_outputs)}")
+            if isinstance(base_outputs, tuple):
+                print(f"Base model tuple length: {len(base_outputs)}")
+                print(f"First element type: {type(base_outputs[0])}")
+                if isinstance(base_outputs[0], torch.Tensor):
+                    print(f"First tensor shape: {base_outputs[0].shape}")
+        except Exception as e:
+            print(f"Error during base model forward pass: {e}")
     
-    # Check that we have the expected number of enhancements
-    if hasattr(model, 'backbone_enhancements'):
-        num_enhancements = len(model.backbone_enhancements)
-        print(f"Found {num_enhancements} backbone enhancements")
-        
-        # Verify specific enhancements
-        expected_enhancements = [
-            ("c2f_1", "ResidualC2f"),
-            ("c2f_2", "SmallObjectEnhance"), 
-            ("c2f_3", "ResidualC2f")
-        ]
-        
-        found_count = 0
-        for expected_name, expected_type in expected_enhancements:
-            found = False
-            for actual_name, details in model.backbone_enhancements.items():
-                if expected_name == actual_name and details['type'] == expected_type:
-                    print(f"✓ Found {expected_type} at {actual_name} as expected")
-                    found = True
-                    found_count += 1
-                    break
-            if not found:
-                print(f"✗ Missing {expected_type} at {expected_name}")
-        
-        if found_count == len(expected_enhancements):
-            print("All expected enhancements were found!")
-        else:
-            print(f"Only found {found_count}/{len(expected_enhancements)} expected enhancements")
+    print("\nTHIS IS WHERE CONVERSION TO RESULTS SHOULD HAPPEN")
+    print("================================================")
+    print("The forward method should take the base_outputs (above)")
+    print("and convert them to a Results object.\n")
+    
+    # Test the enhanced model forward method
+    print("Testing enhanced model forward method:")
+    with torch.no_grad():
+        try:
+            results = model(test_image)
+            print(f"Enhanced model output type: {type(results)}")
+            
+            if isinstance(results, tuple):
+                print(f"Results is a tuple with {len(results)} elements")
+                for i, item in enumerate(results):
+                    print(f"  Element {i} type: {type(item)}")
+                    if isinstance(item, torch.Tensor):
+                        print(f"  Element {i} shape: {item.shape}")
+            
+            # Check for standard Ultralytics Results format
+            if hasattr(results, 'boxes'):
+                print(f"Results IS a standard Ultralytics Results object with 'boxes' attribute")
+                print(f"Number of detections: {len(results.boxes)}")
+            else:
+                print(f"Results is NOT a standard Ultralytics Results object (no 'boxes' attribute)")
+                
+            # Check for non-tensor attributes which would indicate a Results object
+            if not isinstance(results, (torch.Tensor, tuple)):
+                print("Non-tensor attributes:")
+                for attr in dir(results):
+                    if not attr.startswith('_') and not callable(getattr(results, attr)):
+                        print(f"  {attr}: {type(getattr(results, attr))}")
+        except Exception as e:
+            print(f"Error during enhanced model forward pass: {e}")
+            import traceback
+            traceback.print_exc()
+            results = None
+    
+    print("\n" + "="*80)
+    print("RECOMMENDATIONS:")
+    print("="*80)
+    
+    if results is None or isinstance(results, (torch.Tensor, tuple)):
+        print("The model is not returning a Results object. Fix the forward method to create Results properly.")
+        print("\nMake sure you've added this correct implementation to EnhancedYOLOv8.forward():")
+        print("""
+def forward(self, *args, **kwargs):
+    # Get raw outputs
+    outputs = self.base_model(*args, **kwargs)
+    
+    # If outputs are in tuple format, convert to Results
+    if isinstance(outputs, tuple):
+        try:
+            from ultralytics.engine.results import Results
+            
+            # Extract the outputs from the tuple
+            output = outputs[0]  # First element contains detection predictions
+            
+            # Get original image
+            original_img = args[0] if len(args) > 0 else kwargs.get('images', None)
+            
+            # Create Results object
+            if isinstance(original_img, torch.Tensor):
+                img = original_img[0] if original_img.shape[0] == 1 else original_img
+                img_size = img.shape[1:3] if img.dim() == 3 else img.shape[2:4]  # HW
+            else:
+                img = original_img
+                img_size = None
+            
+            # Create Results object with the processed predictions
+            results = Results(
+                boxes=output,  # Detection boxes
+                orig_img=img,  # Original image
+                names=self.names,  # Class names
+                path=None,  # Path to the image
+                keypoints=None  # No keypoints for object detection
+            )
+            
+            return results
+        except Exception as e:
+            print(f"Warning: Could not create Results object: {e}")
+            return outputs
+    
+    # Return outputs directly if already in correct format
+    return outputs
+        """)
     else:
-        print("No backbone_enhancements attribute found in model")
-
-def test_detection(model):
-    """Test if the model can actually perform detection."""
-    try:
-        print("\nTesting detection capabilities...")
-        dummy_input = torch.randn(1, 3, 640, 640)
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
-        with torch.no_grad():
-            standard_model.eval()
-            standard_output = standard_model(dummy_input)
-        standard_time = time.time() - start_time
-        
-        print(f"\nInference time:")
-        print(f"  Enhanced model: {enhanced_time*1000:.2f} ms")
-        print(f"  Standard model: {standard_time*1000:.2f} ms")
-        print(f"  Difference: {((enhanced_time - standard_time) / standard_time) * 100:.1f}%")
-        
-        # Output shape comparison
-        print(f"\nOutput shapes:")
-        print(f"  Enhanced model output type: {type(enhanced_output)}")
-        print(f"  Standard model output type: {type(standard_output)}")
-        
-        if isinstance(enhanced_output, tuple):
-            print(f"  Enhanced output tuple length: {len(enhanced_output)}")
-        if isinstance(standard_output, tuple):
-            print(f"  Standard output tuple length: {len(standard_output)}")
-        
-    except ImportError:
-        print("Could not import ultralytics for comparison")
-    except Exception as e:
-        print(f"Error during comparison: {e}")
-
-def test_save_load(model):
-    """Test saving and loading enhanced model."""
-    print("\n=== Save/Load Testing ===")
+        print("The model is returning a Results object as expected. If you're still having issues,")
+        print("check that your camera test script is correctly handling Results objects.")
     
-    try:
-        # Save model
-        save_path = "enhanced_yolov8_test.pt"
-        save_model_with_yaml(model, save_path)
-        
-        # Load model
-        loaded_model = load_model_with_yaml(save_path)
-        
-        # Verify loaded model has same structure
-        original_params = sum(p.numel() for p in model.parameters())
-        loaded_params = sum(p.numel() for p in loaded_model.parameters())
-        
-        print(f"Parameter count match: {original_params == loaded_params}")
-        
-        # Test forward pass on loaded model
-        dummy_input = torch.randn(1, 3, 640, 640)
-        with torch.no_grad():
-            loaded_model.eval()
-            output = loaded_model(dummy_input)
-        
-<<<<<<< HEAD
-        print("✓ Save/Load test successful")
-=======
-        print("Forward pass of loaded model successful!")
-        
-        # Verify backbone enhancements after loading
-        verify_backbone_enhancements(loaded_model)
-        
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
-        return loaded_model
-        
-    except Exception as e:
-        print(f"Error in save/load test: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-def main():
-    print("Creating hook-based enhanced YOLOv8 model...")
-    model = create_enhanced_yolov8(size='n', pretrained=True)
+    print("="*80)
     
-    # Analyze model structure
-    analyze_model_structure(model)
-    
-<<<<<<< HEAD
-    # Trace backbone enhancements
-    trace_backbone_enhancements(model)
-=======
-    # Verify backbone enhancements
-    verify_backbone_enhancements(model)
-    
-    # Verify backbone enhancements
-    verify_backbone_enhancements(model)
-    
-    # Test detection capabilities
-    test_detection(model)
->>>>>>> c85ddd7525b84bcf2edfa7b0eee5c39bf773f684
-    
-    # Test forward pass with hooks
-    activations = test_forward_pass_with_hooks(model)
-    
-    # Test training mode
-    test_training_mode(model)
-    
-    # Compare with standard model
-    compare_with_standard(model)
-    
-    # Test save/load
-    loaded_model = test_save_load(model)
-    
-    # Summary
-    print("\n=== Test Summary ===")
-    print(f"Hook-based enhancements successfully applied to backbone:")
-    if hasattr(model, 'c2f_indices') and len(model.c2f_indices) >= 3:
-        backbone_c2f = model.c2f_indices[:3]
-        print(f"  Layer {backbone_c2f[0]}: ResidualC2f")
-        print(f"  Layer {backbone_c2f[1]}: SmallObjectEnhance")
-        print(f"  Layer {backbone_c2f[2]}: ResidualC2f")
-    print("✓ All tests completed successfully!")
+    return results
 
 if __name__ == "__main__":
-    main()
+    results = test_forward_pass()

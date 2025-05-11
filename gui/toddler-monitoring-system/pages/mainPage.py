@@ -22,12 +22,13 @@ from ultralytics import YOLO
 # Import from other pages
 from .aboutPage import AboutDialog
 from .helpPage import HelpDialog
-# from .mobileHelpPage import show_mobile_help
+from .mobileHelpPage import show_mobile_help
 from .styles import DarkThemeStyle
 
 # Import from integration
 from integration import (
     integrate_geofence,
+    integrate_mobile_app,
     HAZARDOUS_OBJECTS
 )
 class Ui_MainWindow(object):
@@ -858,16 +859,58 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         self.ui.actionFAQs.triggered.connect(self.show_faqs)
         self.ui.actionAbout.triggered.connect(self.show_about_dialog)
         
-        # # ADD THIS CODE HERE - Add menu item to help menu for mobile app connection
-        # if hasattr(self, 'ui') and hasattr(self.ui, 'menuHelp'):
-        #     # Add separator before mobile options
-        #     self.ui.menuHelp.addSeparator()
+        # ADD THIS CODE HERE - Add menu item to help menu for mobile app connection
+        if hasattr(self, 'ui') and hasattr(self.ui, 'menuHelp'):
+            # Add separator before mobile options
+            self.ui.menuHelp.addSeparator()
             
-        #     # Add Mobile App Help action
-        #     mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
-        #     mobile_help_action.triggered.connect(show_mobile_help)
-        #     self.ui.menuHelp.addAction(mobile_help_action)
+            # Add Mobile App Help action
+            mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
+            mobile_help_action.triggered.connect(show_mobile_help)
+            self.ui.menuHelp.addAction(mobile_help_action)
 
+    def add_mobile_connection_menu(self):
+        """Add menu item for mobile connection"""
+        try:
+            # Ensure the menubar exists
+            if not hasattr(self.ui, 'menubar'):
+                self.ui.menubar = QtWidgets.QMenuBar(self)
+                self.setMenuBar(self.ui.menubar)
+            
+            # Remove any existing Mobile menus
+            actions_to_remove = []
+            for action in self.ui.menubar.actions():
+                if action.text() == "Mobile":
+                    actions_to_remove.append(action)
+            
+            # Delete all Mobile menu actions
+            for action in actions_to_remove:
+                if action.menu():
+                    action.menu().deleteLater()
+                self.ui.menubar.removeAction(action)
+            
+            # Create new Mobile menu
+            mobile_menu = QtWidgets.QMenu("Mobile", self)
+            self.ui.menubar.addMenu(mobile_menu)
+            
+            # Add Connect Mobile App action
+            connect_action = QtWidgets.QAction("Connect Mobile App", self)
+            connect_action.triggered.connect(self.show_mobile_connection_dialog)
+            mobile_menu.addAction(connect_action)
+            
+            # Add separator
+            mobile_menu.addSeparator()
+            
+            # Add Mobile Help action  
+            mobile_help_action = QtWidgets.QAction("Mobile App Guide", self)
+            mobile_help_action.triggered.connect(show_mobile_help)
+            mobile_menu.addAction(mobile_help_action)
+            
+            print("Mobile menu created successfully")
+            
+        except Exception as e:
+            print(f"Error creating mobile menu: {e}")
+            
     def on_resize(self, event):
         """Handle window resize events"""
         # Make sure camera view is updated if there's a pixmap

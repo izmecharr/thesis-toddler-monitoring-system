@@ -11,7 +11,7 @@ from .mainPage import (
 
 from .aboutPage import AboutDialog
 from .helpPage import HelpDialog
-# from .mobileHelpPage import show_mobile_help
+from .mobileHelpPage import show_mobile_help
 # from .mobileQrPage import (
 #     QRScanPage,
 #     AlertPage,

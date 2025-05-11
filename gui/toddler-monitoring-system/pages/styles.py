@@ -175,7 +175,28 @@ class DarkThemeStyle:
         QLabel {{
             color: {TEXT_PRIMARY};
         }}
+        QWidget {{
+            background-color: {BACKGROUND_COLOR};
+        }}
+        QTabWidget {{
+            background-color: {BACKGROUND_COLOR};
+        }}
+        QTabWidget::pane {{
+            background-color: {PANEL_COLOR};
+            border: 1px solid #444458;
+            border-radius: {BORDER_RADIUS};
+        }}
+        QTabWidget QWidget {{
+            background-color: {PANEL_COLOR};
+        }}
         QDoubleSpinBox {{
+            border: 1px solid #444458;
+            border-radius: {BORDER_RADIUS};
+            padding: 5px;
+            background-color: {PANEL_COLOR};
+            color: {TEXT_PRIMARY};
+        }}
+        QSpinBox {{
             border: 1px solid #444458;
             border-radius: {BORDER_RADIUS};
             padding: 5px;

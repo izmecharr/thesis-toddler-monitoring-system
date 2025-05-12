@@ -605,7 +605,7 @@ class Ui_MainWindow(object):
                     
                     # Initialize lists to track people separately
                     toddlers = []
-                    persons = []
+                    adults = []
                     other_objects = []
                     
                     # Get bounding boxes, confidence scores and class names
@@ -640,48 +640,48 @@ class Ui_MainWindow(object):
                                     geofence_status = " [Outside]"
                                     is_inside_geofence = False
                         
-                        # Check if detection is a person/toddler with good confidence
+                        # Check if detection is a adult/toddler with good confidence
                         if conf > 0.50:
-                            # Check if it's a person or toddler
-                            if cls_name in ['person', 'toddler']:
+                            # Check if it's a adult or toddler
+                            if cls_name in ['adult', 'toddler']:
                                 # Store width for both
                                 width = x2 - x1
                                 
-                                # Add color differentiation for person vs toddler
-                                if cls_name == 'person':
-                                    # Store as person
-                                    persons.append((x1, y1, x2, y2, width))
+                                # Add color differentiation for adult vs toddler
+                                if cls_name == 'adult':
+                                    # Store as adult
+                                    adults.append((x1, y1, x2, y2, width))
                                     
                                     if is_inside_geofence:
-                                        # Bright purple for persons inside geofence
-                                        person_box_color = (255, 0, 255)  # BGR: Magenta/Bright purple
+                                        # Bright purple for adults inside geofence
+                                        adult_box_color = (255, 0, 255)  # BGR: Magenta/Bright purple
                                     else:
-                                        # Dark purple for persons outside geofence
-                                        person_box_color = (128, 0, 128)  # BGR: Purple
+                                        # Dark purple for adults outside geofence
+                                        adult_box_color = (128, 0, 128)  # BGR: Purple
                                 else:  # toddler
                                     # Store as toddler
                                     toddlers.append((x1, y1, x2, y2, width))
                                     
                                     if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
                                         # Orange for toddlers outside geofence
-                                        person_box_color = (0, 165, 255)  # BGR: Orange
+                                        adult_box_color = (0, 165, 255)  # BGR: Orange
                                         # Show alert for toddler outside geofence
                                         self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
                                         self.play_alarm_sound()
                                     else:
                                         # Green for toddlers inside geofence
-                                        person_box_color = (0, 255, 0)  # BGR: Green
+                                        adult_box_color = (0, 255, 0)  # BGR: Green
                                 
-                                # Draw bounding box for person/toddler with appropriate color
-                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), person_box_color, 2)
+                                # Draw bounding box for adult/toddler with appropriate color
+                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), adult_box_color, 2)
                                 
                                 # Add label with confidence and geofence status
                                 label = f"{geofence_status} {cls_name}: {conf:.2f}"
                                 cv2.putText(frame_rgb, label, (x1, y1-10), 
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, person_box_color, 2)
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, adult_box_color, 2)
                             
                             else:
-                                # Handle other objects (not person/toddler)
+                                # Handle other objects (not adult/toddler)
                                 # Determine if the object is hazardous
                                 is_hazardous = self.is_hazardous(cls_name)
                                 
@@ -714,7 +714,7 @@ class Ui_MainWindow(object):
                     # Store only toddlers for distance calculations
                     self._detected_toddlers = toddlers
                     
-                    # Check for distance between ONLY toddlers and other objects (not persons)
+                    # Check for distance between ONLY toddlers and other objects (not adults)
                     if len(toddlers) > 0 and len(other_objects) > 0:
                         for tx1, ty1, tx2, ty2, t_width in toddlers:
                             # Calculate toddler center point
@@ -780,7 +780,7 @@ class Ui_MainWindow(object):
                             non_hazardous_objects.append(obj_name)
 
                     # Create status bar message with separate counts
-                    status_text = f"Update: Toddler(s): {len(toddlers)} | Person(s): {len(persons)} | Non-hazardous objects: {len(non_hazardous_objects)} | Hazardous Objects: "
+                    status_text = f"Update: Toddler(s): {len(toddlers)} | Adult(s): {len(adults)} | Non-hazardous objects: {len(non_hazardous_objects)} | Hazardous Objects: "
 
                     # Add hazards if any detected
                     if hazardous_objects:

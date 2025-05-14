@@ -35,7 +35,7 @@ DEFAULT_DISTANCE_THRESHOLD = 1.5
 DEFAULT_MINKOWSKI_P = 2
 
 # Known width of reference object for distance calculation (meters)
-DEFAULT_KNOWN_WIDTH = 0.5  # Average toddler shoulder width
+DEFAULT_KNOWN_WIDTH = 0.3  # Average toddler shoulder width
 
 # Confidence threshold for object detection
 CONFIDENCE_THRESHOLD = 0.50

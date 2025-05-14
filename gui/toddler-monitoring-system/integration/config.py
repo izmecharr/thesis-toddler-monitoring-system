@@ -7,14 +7,25 @@ Contains shared settings and defaults that can be imported by other modules
 
 # List of hazardous objects to monitor
 HAZARDOUS_OBJECTS = [
-    'coin', 
-    'drink', 
-    'fork', 
-    'hammer', 
-    'screwdriver', 
-    'stapler', 
-    'sharp-item', 
-    'cell phone'
+    'knife',
+    'lego',
+    'pen',
+    'outlet',
+    'screwdriver',
+    'hammer',
+    'wrench',
+    'scissors',
+    'pliers',
+    'coin',
+    'lighter',
+    'fan',
+    'battery',
+    'cord',
+    'razor',
+    'glass',
+    'drink',
+    'bottle',
+    'fork'
 ]
 
 # Distance threshold for proximity alerts (meters)

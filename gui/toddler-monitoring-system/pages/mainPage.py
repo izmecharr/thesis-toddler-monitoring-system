@@ -641,7 +641,7 @@ class Ui_MainWindow(object):
                                     is_inside_geofence = False
                         
                         # Check if detection is a adult/toddler with good confidence
-                        if conf > 0.25:
+                        if conf > 0.20:
                             # Check if it's a adult or toddler
                             if cls_name in ['adult', 'toddler']:
                                 # Store width for both

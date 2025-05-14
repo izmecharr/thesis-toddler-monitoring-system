@@ -642,8 +642,12 @@ class Ui_MainWindow(object):
                         
                         # Check if detection is a adult/toddler with good confidence
                         if conf > 0.20:
-                            # Check if it's a adult or toddler
-                            if cls_name in ['adult', 'toddler']:
+                            # Check if it's an adult or toddler, completely skip 'person' class
+                            if cls_name == 'person':
+                                # Skip this detection completely - don't process or display 'person' class
+                                continue
+                                
+                            elif cls_name in ['adult', 'toddler']:
                                 # Store width for both
                                 width = x2 - x1
                                 
@@ -681,7 +685,7 @@ class Ui_MainWindow(object):
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, adult_box_color, 2)
                             
                             else:
-                                # Handle other objects (not adult/toddler)
+                                # Handle other objects (not adult/toddler/person)
                                 # Determine if the object is hazardous
                                 is_hazardous = self.is_hazardous(cls_name)
                                 

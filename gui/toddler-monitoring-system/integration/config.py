@@ -6,24 +6,36 @@ Contains shared settings and defaults that can be imported by other modules
 """
 
 # List of hazardous objects to monitor
+# HAZARDOUS_OBJECTS = [
+#     'knife',
+#     'lego',
+#     'pen',
+#     'outlet',
+#     'screwdriver',
+#     'hammer',
+#     'wrench',
+#     'scissors',
+#     'pliers',
+#     'coin',
+#     'lighter',
+#     'fan',
+#     'battery',
+#     'cord',
+#     'razor',
+#     'glass',
+#     'drink',
+#     'bottle',
+#     'fork'
+# ]
+
 HAZARDOUS_OBJECTS = [
+    'hair dryer',
+    'vase',
+    'oven',
+    'microwave',
+    'remote',
     'knife',
-    'lego',
-    'pen',
-    'outlet',
-    'screwdriver',
-    'hammer',
-    'wrench',
-    'scissors',
-    'pliers',
-    'coin',
-    'lighter',
-    'fan',
-    'battery',
-    'cord',
-    'razor',
-    'glass',
-    'drink',
+    'wine glass',
     'bottle',
     'fork'
 ]

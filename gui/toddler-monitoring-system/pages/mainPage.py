@@ -25,11 +25,13 @@ from .helpPage import HelpDialog
 from .mobileHelpPage import show_mobile_help
 from .styles import DarkThemeStyle
 from .reportPage import ReportPanel
+from .hazard_presets import show_hazard_preset_dialog
 
 # Import from integration
 from integration import (
     integrate_geofence,
     integrate_mobile_app,
+    integrate_hazard_presets,
     HAZARDOUS_OBJECTS
 )
 class Ui_MainWindow(object):
@@ -327,17 +329,33 @@ class Ui_MainWindow(object):
         # Initialize the notification manager
         self.notification_manager = NotificationManager()
 
+        # # Add a Hazard Presets button next to the Configure button
+        # self.HazardPresetsButton = QtWidgets.QPushButton(self.control_panel)
+        # self.HazardPresetsButton.setObjectName("HazardPresetsButton")
+        # self.HazardPresetsButton.setMinimumWidth(120)
+        # self.HazardPresetsButton.setMinimumHeight(36)
+        # self.HazardPresetsButton.setFont(font1)
+        # self.HazardPresetsButton.setStyleSheet(DarkThemeStyle.CONFIG_BUTTON_STYLE)
+        # self.HazardPresetsButton.setText("Hazard Presets")
+        # self.control_layout.addWidget(self.HazardPresetsButton)
+        
+        # # Connect the button
+        # self.HazardPresetsButton.clicked.connect(self.show_hazard_presets)
+
         # Initialize variables
         self.camera = None      
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_frame)
         self.selected_camera_index = 0
 
+
         # Load YOLO Model
         try:
             self.update_status("Loading YOLO model...", "normal")
             # Update this path to your model path
             self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
+            # self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\assets\\yolov8n-cls.pt')
+            
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\enhanced_yolov8\\enhanced_n_3\\weights\\best.pt')
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\runs\\detect\\my_custom_model5\\weights\\best.pt')
             
@@ -376,6 +394,15 @@ class Ui_MainWindow(object):
         else:
             self.statusLabel.setStyleSheet(DarkThemeStyle.STATUS_NORMAL)
     
+    def show_hazard_presets(self):
+        '''Show the hazard presets selection dialog'''
+        def on_preset_selected(new_hazards):
+            self.hazardous_objects = new_hazards.copy()
+            self.update_status(f"Hazard preset applied with {len(new_hazards)} items", "success")
+            self.log_general_message(f"Applied hazard preset: {', '.join(new_hazards)}", "info")
+            
+        show_hazard_preset_dialog(self.main_window, self.hazardous_objects, on_preset_selected)
+
     def play_alarm_sound(self):
         """Play an alarm sound locally"""
         try:
@@ -904,6 +931,9 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         # Initialize mobile app integration
         integrate_mobile_app(self)
         
+        # Initialize hazard presets - ADD THIS LINE
+        integrate_hazard_presets(self)
+
         # Check if Mobile menu already exists before adding it
         if not hasattr(self, '_mobile_menu_added'):
             self.add_mobile_connection_menu()

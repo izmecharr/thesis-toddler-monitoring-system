@@ -353,17 +353,28 @@ class Ui_MainWindow(object):
         try:
             self.update_status("Loading YOLO model...", "normal")
             # Update this path to your model path
-            self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
+            # self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
             # self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\assets\\yolov8n-cls.pt')
             
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\enhanced_yolov8\\enhanced_n_3\\weights\\best.pt')
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\runs\\detect\\my_custom_model5\\weights\\best.pt')
+                # Load YOLOv11 model (general detection model)
+            self.model_yolo11 = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
             
+            # Load YOLOv8 custom model (toddler-specific model)
+            # self.model_yolo8_custom = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\resources\\best.pt')
+            self.model_yolo8_custom = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolov11-custom-v1.pt')
+            
+            # Set the primary model for compatibility with existing code
+            self.model = self.model_yolo11
             self.update_status("YOLO model loaded successfully", "success")
         except Exception as e:
             self.update_status(f"Error loading model - {str(e)}", "warning")
             self.model = None
-        
+            self.model_yolo11 = None
+            self.model_yolo8_custom = None
+            self.model = None
+
         # Distance calculation parameters
         self.known_width = 0.3  # Average human shoulder width in meters
         self.focal_length = None  # To be calculated dynamically
@@ -636,7 +647,7 @@ class Ui_MainWindow(object):
         return (self.known_width * self.focal_length) / pixel_width
 
     def update_frame(self):
-        """Process each frame with YOLO object detection"""
+        """Process each frame with both YOLO object detection models"""
         ret, frame = self.camera.read()
         if ret:
             # Convert frame to RGB for YOLO processing
@@ -645,107 +656,97 @@ class Ui_MainWindow(object):
             # Store original detected toddlers to clear on each frame
             self._detected_toddlers = []
             
-            # Process with YOLO model if available
-            if self.model:
+            # Variables to store detection results
+            toddlers = []
+            adults = []
+            other_objects = []
+            
+            # Process with YOLOv11 model (for general objects and hazards)
+            if self.model_yolo11:
                 # Run YOLO detection on the frame
-                results = self.model(frame_rgb)
+                results_yolo11 = self.model_yolo11(frame_rgb)
                 
                 # Store results for geofence processing
-                self.model.results = results
+                self.model.results = results_yolo11
                 
                 # Make results available to the main window
-                self.main_window.results = results if results else []
+                self.main_window.results = results_yolo11 if results_yolo11 else []
                 
                 # Process results if any detections were made
-                if results and len(results) > 0:
+                if results_yolo11 and len(results_yolo11) > 0:
                     # Get the first result (assuming single image input)
-                    result = results[0]
+                    result = results_yolo11[0]
                     
-                    # Initialize lists to track people separately
-                    toddlers = []
-                    adults = []
-                    other_objects = []
-                    
-                    # Get bounding boxes, confidence scores and class names
+                    # Process YOLOv11 detections to find hazardous objects and adults
                     for box in result.boxes:
-                        # Get box coordinates (convert to integers for drawing)
                         x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
-                        
-                        # Get confidence score
                         conf = float(box.conf[0].cpu().numpy())
-                        
-                        # Get class ID and name
                         cls_id = int(box.cls[0].cpu().numpy())
                         cls_name = result.names[cls_id]
                         
-                        # Calculate center point for geofence checking
+                        # Calculate center point
                         center_x = (x1 + x2) // 2
                         center_y = (y1 + y2) // 2
                         
-                        # Check if object is inside any geofence
+                        # Check geofence status
                         geofence_status = ""
                         is_inside_geofence = False
                         
-                        # Check if geofence manager exists and has active geofences
                         if hasattr(self.main_window, 'geofence_integration'):
                             geofence_manager = self.main_window.geofence_integration
                             if hasattr(geofence_manager, 'saved_geofence') and geofence_manager.saved_geofence:
-                                # Check if point is inside the active geofence
                                 if geofence_manager.point_in_polygon(center_x, center_y, geofence_manager.saved_geofence):
                                     geofence_status = " [Inside]"
                                     is_inside_geofence = True
                                 else:
                                     geofence_status = " [Outside]"
-                                    is_inside_geofence = False
                         
-                        # Check if detection is a adult/toddler with good confidence
                         if conf > 0.20:
-                            # Check if it's an adult or toddler, completely skip 'person' class
+                            width = x2 - x1
+                            
+                            # Skip 'person' class in YOLOv11 - we'll use the custom model for people detection
                             if cls_name == 'person':
-                                # Skip this detection completely - don't process or display 'person' class
                                 continue
                                 
-                            elif cls_name in ['adult', 'toddler']:
-                                # Store width for both
-                                width = x2 - x1
+                            # Process adults from YOLOv11
+                            elif cls_name == 'adult':
+                                adults.append((x1, y1, x2, y2, width))
                                 
-                                # Add color differentiation for adult vs toddler
-                                if cls_name == 'adult':
-                                    # Store as adult
-                                    adults.append((x1, y1, x2, y2, width))
+                                if is_inside_geofence:
+                                    box_color = (255, 0, 255)  # Bright purple for adults inside geofence
+                                else:
+                                    box_color = (128, 0, 128)  # Dark purple for adults outside geofence
                                     
-                                    if is_inside_geofence:
-                                        # Bright purple for adults inside geofence
-                                        adult_box_color = (255, 0, 255)  # BGR: Magenta/Bright purple
-                                    else:
-                                        # Dark purple for adults outside geofence
-                                        adult_box_color = (128, 0, 128)  # BGR: Purple
-                                else:  # toddler
-                                    # Store as toddler
-                                    toddlers.append((x1, y1, x2, y2, width))
-                                    
-                                    if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
-                                        # Orange for toddlers outside geofence
-                                        adult_box_color = (0, 165, 255)  # BGR: Orange
-                                        # Show alert for toddler outside geofence
-                                        self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
-                                        self.play_alarm_sound()
-
-                                        self.log_toddler_outside_geofence()
-                                    else:
-                                        # Green for toddlers inside geofence
-                                        adult_box_color = (0, 255, 0)  # BGR: Green
+                                # Draw bounding box
+                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
                                 
-                                # Draw bounding box for adult/toddler with appropriate color
-                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), adult_box_color, 2)
-                                
-                                # Add label with confidence and geofence status
+                                # Add label
                                 label = f"{geofence_status} {cls_name}: {conf:.2f}"
                                 cv2.putText(frame_rgb, label, (x1, y1-10), 
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, adult_box_color, 2)
-                            
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, box_color, 2)
+                                        
+                            # Process toddlers detected by YOLOv11
+                            elif cls_name == 'toddler':
+                                toddlers.append((x1, y1, x2, y2, width))
+                                
+                                if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
+                                    box_color = (0, 165, 255)  # Orange for toddlers outside geofence
+                                    self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
+                                    self.play_alarm_sound()
+                                    self.log_toddler_outside_geofence()
+                                else:
+                                    box_color = (0, 255, 0)  # Green for toddlers inside geofence
+                                
+                                # Draw bounding box
+                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
+                                
+                                # Add label
+                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
+                                cv2.putText(frame_rgb, label, (x1, y1-10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, box_color, 2)
+                                        
+                            # Process hazardous objects from YOLOv11
                             else:
-                                # Handle other objects (not adult/toddler/person)
                                 # Determine if the object is hazardous
                                 is_hazardous = self.is_hazardous(cls_name)
                                 
@@ -754,115 +755,228 @@ class Ui_MainWindow(object):
                                 
                                 # Determine box color based on hazardous status and geofence position
                                 if is_hazardous and is_inside_geofence:
-                                    # Red color for hazardous objects inside geofence
-                                    box_color = (255, 0, 0)  # BGR: Red
-                                    # Show alert for hazard inside safe area
+                                    box_color = (255, 0, 0)  # Red for hazardous objects inside geofence
                                     self.update_status(f"WARNING: Hazard is inside the safe area!", "warning")
                                     self.play_alarm_sound()
-
                                     self.log_hazard_in_geofence(cls_name)
                                     
-                                elif is_hazardous and not is_inside_geofence:
-                                    # Blue color for hazardous objects outside geofence
-                                    box_color = (255, 0, 0)  # BGR: Red
+                                elif is_hazardous:
+                                    box_color = (255, 0, 0)  # Red for hazardous objects
                                 else:
-                                    # Default blue color for non-hazardous objects
-                                    box_color = (0, 0, 255)  # BGR: Blue
+                                    box_color = (0, 0, 255)  # Blue for non-hazardous objects
                                 
-                                # Create label with geofence status
-                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
-                                
-                                # Draw the box and label
+                                # Draw bounding box
                                 cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
+                                
+                                # Add label
+                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
                                 cv2.putText(frame_rgb, label, (x1, y1-10), 
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
-                    
-                    # Store only toddlers for distance calculations
-                    self._detected_toddlers = toddlers
-                    
-                    # Check for distance between ONLY toddlers and other objects (not adults)
-                    if len(toddlers) > 0 and len(other_objects) > 0:
-                        for tx1, ty1, tx2, ty2, t_width in toddlers:
-                            # Calculate toddler center point
-                            toddler_center = ((tx1 + tx2) // 2, (ty1 + ty2) // 2)
-                            
-                            for obj_name, ox1, oy1, ox2, oy2, o_conf in other_objects:
-                                # Calculate object center point
-                                obj_center = ((ox1 + ox2) // 2, (oy1 + oy2) // 2)
-                                
-                                # Calculate Minkowski distance between centers
-                                dx = abs(toddler_center[0] - obj_center[0])
-                                dy = abs(toddler_center[1] - obj_center[1])
-                                p = self.minkowski_p
-                                pixel_distance = (dx ** p + dy ** p) ** (1/p)
-                                
-                                # Estimate real-world distance if possible
-                                if self.focal_length is None and t_width > 0:
-                                    # Calculate focal length if not already set
-                                    self.focal_length = (t_width * 1.0) / self.known_width
-                                    self.update_status(f"Calibrated focal length: {self.focal_length:.2f}", "normal")
-                                
-                                estimated_distance = None
-                                if self.focal_length is not None and t_width > 0:
-                                    estimated_distance = self.calculate_distance(t_width)
-                                    
-                                    # Draw distance line between toddler and object if close
-                                    if estimated_distance < self.distance_threshold * 2:  # Show for objects within 2x threshold
-                                        # Draw line between centers
-                                        cv2.line(frame_rgb, toddler_center, obj_center, (255, 0, 255), 2)
-                                        
-                                        # Add distance label
-                                        mid_x = (toddler_center[0] + obj_center[0]) // 2
-                                        mid_y = (toddler_center[1] + obj_center[1]) // 2
-                                        dist_label = f"{estimated_distance:.2f}"
-                                        cv2.putText(frame_rgb, dist_label, (mid_x, mid_y), 
-                                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
-                                
-                                # Check object's geofence status before alerting
-                                object_inside_geofence = False
-                                if hasattr(self.main_window, 'geofence_integration'):
-                                    geofence_manager = self.main_window.geofence_integration
-                                    if hasattr(geofence_manager, 'saved_geofence') and geofence_manager.saved_geofence:
-                                        if geofence_manager.point_in_polygon(obj_center[0], obj_center[1], geofence_manager.saved_geofence):
-                                            object_inside_geofence = True
-                                
-                                # Check if object is too close to toddler
-                                if (estimated_distance is not None and 
-                                    estimated_distance < self.distance_threshold and
-                                    self.is_hazardous(obj_name)):  # Added geofence condition
-                                    
-                                    # Update status and send notification
-                                    self.update_status(f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f})", "warning")
-                                    # Notification would go here if you have a notification system
-                                    self.play_alarm_sound()
-
-                                    self.log_hazard_near_toddler(obj_name, estimated_distance)
-
-                    hazardous_objects = []
-                    non_hazardous_objects = []
-
-                    for obj_name, _, _, _, _, _ in other_objects:
-                        if self.is_hazardous(obj_name):
-                            hazardous_objects.append(obj_name)
-                        else:
-                            non_hazardous_objects.append(obj_name)
-
-                    # Create status bar message with separate counts
-                    status_text = f"Update: Toddler(s): {len(toddlers)} | Adult(s): {len(adults)} | Non-hazardous objects: {len(non_hazardous_objects)} | Hazardous Objects: "
-
-                    # Add hazards if any detected
-                    if hazardous_objects:
-                        hazards_text = ", ".join(hazardous_objects)
-                        status_text += f"{len(hazardous_objects)} [{hazards_text}]"
-                    else:
-                        status_text += "0"
-
-                    self.statusbar.showMessage(status_text)
-                else:
-                    # No detections
-                    self.statusbar.showMessage("No objects detected")
             
-            # Frame processing complete
+            # Process with YOLOv8 custom model (for improved toddler detection)
+            if self.model_yolo8_custom:
+                # Run YOLOv8 custom detection
+                results_yolo8 = self.model_yolo8_custom(frame_rgb)
+                
+                # Process results if any detections were made
+                if results_yolo8 and len(results_yolo8) > 0:
+                    # Get the first result
+                    result = results_yolo8[0]
+                    
+                    # Process YOLOv8 custom model detections
+                    for box in result.boxes:
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                        conf = float(box.conf[0].cpu().numpy())
+                        cls_id = int(box.cls[0].cpu().numpy())
+                        cls_name = result.names[cls_id]
+                        
+                        # Skip low confidence detections
+                        if conf < 0.30:  # Higher threshold for custom model
+                            continue
+                            
+                        # Calculate center point
+                        center_x = (x1 + x2) // 2
+                        center_y = (y1 + y2) // 2
+                        
+                        # Check geofence status
+                        geofence_status = ""
+                        is_inside_geofence = False
+                        
+                        if hasattr(self.main_window, 'geofence_integration'):
+                            geofence_manager = self.main_window.geofence_integration
+                            if hasattr(geofence_manager, 'saved_geofence') and geofence_manager.saved_geofence:
+                                if geofence_manager.point_in_polygon(center_x, center_y, geofence_manager.saved_geofence):
+                                    geofence_status = " [Inside]"
+                                    is_inside_geofence = True
+                                else:
+                                    geofence_status = " [Outside]"
+                        
+                        width = x2 - x1
+                        
+                        # Handle custom model classes
+                        if cls_name == 'toddler':
+                            # Add to toddlers list if not already detected by YOLOv11
+                            # Check if this detection overlaps with any existing detection
+                            is_duplicate = False
+                            for tx1, ty1, tx2, ty2, _ in toddlers:
+                                # Calculate IoU to check for overlap
+                                # (simplified - just check center point is within existing box)
+                                if tx1 <= center_x <= tx2 and ty1 <= center_y <= ty2:
+                                    is_duplicate = True
+                                    break
+                            
+                            if not is_duplicate:
+                                toddlers.append((x1, y1, x2, y2, width))
+                                
+                                # Determine box color based on geofence
+                                if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
+                                    box_color = (0, 165, 255)  # Orange for toddlers outside geofence
+                                    self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
+                                    self.play_alarm_sound()
+                                    self.log_toddler_outside_geofence()
+                                else:
+                                    box_color = (0, 255, 0)  # Green for toddlers inside geofence
+                                
+                                # Draw bounding box with dashed lines for custom model
+                                # Draw dashed rectangle
+                                dash_length = 5
+                                for i in range(0, int((x2-x1)/dash_length)):
+                                    start_x = x1 + i * dash_length * 2
+                                    end_x = min(start_x + dash_length, x2)
+                                    cv2.line(frame_rgb, (start_x, y1), (end_x, y1), box_color, 2)
+                                    cv2.line(frame_rgb, (start_x, y2), (end_x, y2), box_color, 2)
+                                
+                                for i in range(0, int((y2-y1)/dash_length)):
+                                    start_y = y1 + i * dash_length * 2
+                                    end_y = min(start_y + dash_length, y2)
+                                    cv2.line(frame_rgb, (x1, start_y), (x1, end_y), box_color, 2)
+                                    cv2.line(frame_rgb, (x2, start_y), (x2, end_y), box_color, 2)
+                                
+                                # Add label with tag showing it's from custom model
+                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
+                                cv2.putText(frame_rgb, label, (x1, y1-10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, box_color, 2)
+                        
+                        elif cls_name == 'non-toddler':
+                            # Convert 'non-toddler' detections from custom model to 'adult'
+                            # Check if this detection overlaps with any existing adult detection to avoid duplicates
+                            is_duplicate = False
+                            for ax1, ay1, ax2, ay2, _ in adults:
+                                # Check if center point is within existing box
+                                if ax1 <= center_x <= ax2 and ay1 <= center_y <= ay2:
+                                    is_duplicate = True
+                                    break
+                            
+                            if not is_duplicate:
+                                # Add to adults list
+                                adults.append((x1, y1, x2, y2, width))
+                                
+                                # Determine box color based on geofence status
+                                if is_inside_geofence:
+                                    box_color = (255, 0, 255)  # Bright purple for adults inside geofence
+                                else:
+                                    box_color = (128, 0, 128)  # Dark purple for adults outside geofence
+                                
+                                # Draw bounding box with dashed lines to indicate it's from custom model
+                                # Draw dashed rectangle
+                                dash_length = 5
+                                for i in range(0, int((x2-x1)/dash_length)):
+                                    start_x = x1 + i * dash_length * 2
+                                    end_x = min(start_x + dash_length, x2)
+                                    cv2.line(frame_rgb, (start_x, y1), (end_x, y1), box_color, 2)
+                                    cv2.line(frame_rgb, (start_x, y2), (end_x, y2), box_color, 2)
+                                
+                                for i in range(0, int((y2-y1)/dash_length)):
+                                    start_y = y1 + i * dash_length * 2
+                                    end_y = min(start_y + dash_length, y2)
+                                    cv2.line(frame_rgb, (x1, start_y), (x1, end_y), box_color, 2)
+                                    cv2.line(frame_rgb, (x2, start_y), (x2, end_y), box_color, 2)
+                                
+                                # Add label with "Adult" instead of "non-toddler" and mark it as from custom model
+                                label = f"{geofence_status} Adult: {conf:.2f}"
+                                cv2.putText(frame_rgb, label, (x1, y1-10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, box_color, 2)
+            
+            # Store detected toddlers for distance calculations
+            self._detected_toddlers = toddlers
+            
+            # Check for distance between toddlers and other objects
+            if len(toddlers) > 0 and len(other_objects) > 0:
+                for tx1, ty1, tx2, ty2, t_width in toddlers:
+                    # Calculate toddler center point
+                    toddler_center = ((tx1 + tx2) // 2, (ty1 + ty2) // 2)
+                    
+                    for obj_name, ox1, oy1, ox2, oy2, o_conf in other_objects:
+                        # Calculate object center point
+                        obj_center = ((ox1 + ox2) // 2, (oy1 + oy2) // 2)
+                        
+                        # Calculate Minkowski distance between centers
+                        dx = abs(toddler_center[0] - obj_center[0])
+                        dy = abs(toddler_center[1] - obj_center[1])
+                        p = self.minkowski_p
+                        pixel_distance = (dx ** p + dy ** p) ** (1/p)
+                        
+                        # Estimate real-world distance if possible
+                        if self.focal_length is None and t_width > 0:
+                            # Calculate focal length if not already set
+                            self.focal_length = (t_width * 1.0) / self.known_width
+                            self.update_status(f"Calibrated focal length: {self.focal_length:.2f}", "normal")
+                        
+                        estimated_distance = None
+                        if self.focal_length is not None and t_width > 0:
+                            estimated_distance = self.calculate_distance(t_width)
+                            
+                            # Draw distance line between toddler and object if close
+                            if estimated_distance < self.distance_threshold * 2:  # Show for objects within 2x threshold
+                                # Draw line between centers
+                                cv2.line(frame_rgb, toddler_center, obj_center, (255, 0, 255), 2)
+                                
+                                # Add distance label
+                                mid_x = (toddler_center[0] + obj_center[0]) // 2
+                                mid_y = (toddler_center[1] + obj_center[1]) // 2
+                                dist_label = f"{estimated_distance:.2f}"
+                                cv2.putText(frame_rgb, dist_label, (mid_x, mid_y), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
+                        
+                        # Check object's geofence status before alerting
+                        object_inside_geofence = False
+                        if hasattr(self.main_window, 'geofence_integration'):
+                            geofence_manager = self.main_window.geofence_integration
+                            if hasattr(geofence_manager, 'saved_geofence') and geofence_manager.saved_geofence:
+                                if geofence_manager.point_in_polygon(obj_center[0], obj_center[1], geofence_manager.saved_geofence):
+                                    object_inside_geofence = True
+                        
+                        # Check if object is too close to toddler
+                        if (estimated_distance is not None and 
+                            estimated_distance < self.distance_threshold and
+                            self.is_hazardous(obj_name)):
+                            
+                            # Update status and send notification
+                            self.update_status(f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f})", "warning")
+                            self.play_alarm_sound()
+                            self.log_hazard_near_toddler(obj_name, estimated_distance)
+            
+            # Create status bar message
+            hazardous_objects = []
+            non_hazardous_objects = []
+
+            for obj_name, _, _, _, _, _ in other_objects:
+                if self.is_hazardous(obj_name):
+                    hazardous_objects.append(obj_name)
+                else:
+                    non_hazardous_objects.append(obj_name)
+
+            # Create status bar message with separate counts
+            status_text = f"Update: Toddler(s): {len(toddlers)} | Adult(s): {len(adults)} | Non-hazardous objects: {len(non_hazardous_objects)} | Hazardous Objects: "
+
+            # Add hazards if any detected
+            if hazardous_objects:
+                hazards_text = ", ".join(hazardous_objects)
+                status_text += f"{len(hazardous_objects)} [{hazards_text}]"
+            else:
+                status_text += "0"
+
+            self.statusbar.showMessage(status_text)
             
             # Convert frame to QPixmap and display it
             height, width, channel = frame_rgb.shape

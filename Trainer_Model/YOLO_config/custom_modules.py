@@ -17,7 +17,6 @@ from ultralytics.nn.modules import C2f, Conv
 #--------------------- Custom Module Definitions ---------------------
 
 class GroupNormConv(nn.Module):
-    """Conv module with GroupNorm instead of BatchNorm for small feature maps."""
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, act=True):
         super().__init__()
         if p is None:
@@ -33,7 +32,6 @@ class GroupNormConv(nn.Module):
 
 
 class ResidualC2f(nn.Module):
-    """C2f block with residual connection for better gradient flow."""
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
         super().__init__()
         self.c2f = C2f(c1, c2, n, shortcut, g, e)  # Use standard C2f
@@ -44,7 +42,6 @@ class ResidualC2f(nn.Module):
 
 
 class SmallObjectEnhance(nn.Module):
-    """Channel attention module optimized for small object detection with GroupNorm."""
     def __init__(self, c1, c2, act=True):
         super().__init__()
         self.cv1 = GroupNormConv(c1, c2//2, 1, 1, act=act)

@@ -354,11 +354,8 @@ class Ui_MainWindow(object):
             self.update_status("Loading YOLO model...", "normal")
             # Update this path to your model path
             self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
-            # self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\assets\\yolov8n-cls.pt')
-            
-            #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\enhanced_yolov8\\enhanced_n_3\\weights\\best.pt')
-            #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\runs\\detect\\my_custom_model5\\weights\\best.pt')
-            
+            # self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\resources\\best.pt')
+
             self.update_status("YOLO model loaded successfully", "success")
         except Exception as e:
             self.update_status(f"Error loading model - {str(e)}", "warning")
@@ -685,7 +682,7 @@ class Ui_MainWindow(object):
                         # Check if object is inside any geofence
                         geofence_status = ""
                         is_inside_geofence = False
-                        
+
                         # Check if geofence manager exists and has active geofences
                         if hasattr(self.main_window, 'geofence_integration'):
                             geofence_manager = self.main_window.geofence_integration
@@ -697,6 +694,11 @@ class Ui_MainWindow(object):
                                 else:
                                     geofence_status = " [Outside]"
                                     is_inside_geofence = False
+                                    # If this is a toddler, log and alert right here
+                                    if cls_name == 'toddler':
+                                        self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
+                                        self.play_alarm_sound()
+                                        self.log_toddler_outside_geofence()
                         
                         # Check if detection is a adult/toddler with good confidence
                         if conf > 0.20:
@@ -716,33 +718,37 @@ class Ui_MainWindow(object):
                                     
                                     if is_inside_geofence:
                                         # Bright purple for adults inside geofence
-                                        adult_box_color = (255, 0, 255)  # BGR: Magenta/Bright purple
+                                        box_color = (255, 0, 255)  # RGB: Magenta/Bright purple
                                     else:
                                         # Dark purple for adults outside geofence
-                                        adult_box_color = (128, 0, 128)  # BGR: Purple
+                                        box_color = (128, 0, 128)  # RGB: Purple
                                 else:  # toddler
                                     # Store as toddler
                                     toddlers.append((x1, y1, x2, y2, width))
                                     
-                                    if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration') and geofence_manager.saved_geofence:
-                                        # Orange for toddlers outside geofence
-                                        adult_box_color = (0, 165, 255)  # BGR: Orange
-                                        # Show alert for toddler outside geofence
-                                        self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
-                                        self.play_alarm_sound()
-
-                                        self.log_toddler_outside_geofence()
+                                    if not is_inside_geofence and hasattr(self.main_window, 'geofence_integration'):
+                                        geofence_manager = self.main_window.geofence_integration
+                                        if hasattr(geofence_manager, 'saved_geofence') and geofence_manager.saved_geofence:
+                                            # Orange for toddlers outside geofence
+                                            box_color = (255, 165, 0)  # RGB: Orange (FIXED from BGR)
+                                            # Show alert for toddler outside geofence
+                                            self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
+                                            self.play_alarm_sound()
+                                            self.log_toddler_outside_geofence()
+                                        else:
+                                            # Green for toddlers inside geofence
+                                            box_color = (0, 255, 0)  # RGB: Green
                                     else:
                                         # Green for toddlers inside geofence
-                                        adult_box_color = (0, 255, 0)  # BGR: Green
+                                        box_color = (0, 255, 0)  # RGB: Green
                                 
                                 # Draw bounding box for adult/toddler with appropriate color
-                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), adult_box_color, 2)
+                                cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
                                 
                                 # Add label with confidence and geofence status
-                                label = f"{geofence_status} {cls_name}: {conf:.2f}"
+                                label = f"{cls_name}{geofence_status}: {conf:.2f}"
                                 cv2.putText(frame_rgb, label, (x1, y1-10), 
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, adult_box_color, 2)
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, box_color, 2)
                             
                             else:
                                 # Handle other objects (not adult/toddler/person)
@@ -751,29 +757,48 @@ class Ui_MainWindow(object):
                                 
                                 # Store other detected objects
                                 other_objects.append((cls_name, x1, y1, x2, y2, conf))
-                                
+
+                                # Make sure geofence status is set correctly
+                                if hasattr(self.main_window, 'geofence_integration'):
+                                    geofence_manager = self.main_window.geofence_integration
+                                    if hasattr(geofence_manager, 'saved_geofence') and geofence_manager.saved_geofence:
+                                        if geofence_manager.point_in_polygon(center_x, center_y, geofence_manager.saved_geofence):
+                                            geofence_status = " [Inside]"
+                                            is_inside_geofence = True
+                                        else:
+                                            geofence_status = " [Outside]"
+                                            is_inside_geofence = False
+
                                 # Determine box color based on hazardous status and geofence position
                                 if is_hazardous and is_inside_geofence:
                                     # Red color for hazardous objects inside geofence
-                                    box_color = (255, 0, 0)  # BGR: Red
+                                    box_color = (255, 0, 0)  # RGB: Red
                                     # Show alert for hazard inside safe area
-                                    self.update_status(f"WARNING: Hazard is inside the safe area!", "warning")
+                                    self.update_status(f"WARNING: Hazard {cls_name} is inside the safe area!", "warning")
                                     self.play_alarm_sound()
-
                                     self.log_hazard_in_geofence(cls_name)
                                     
                                 elif is_hazardous and not is_inside_geofence:
-                                    # Blue color for hazardous objects outside geofence
-                                    box_color = (255, 0, 0)  # BGR: Red
+                                    # Red color for hazardous objects outside geofence (same as inside)
+                                    box_color = (0, 0, 255)  # RGB: Blue
+                                    
+                                elif not is_hazardous and is_inside_geofence:
+                                    # Non-hazardous object inside geofence 
+                                    box_color = (0, 0, 255)  # RGB: Blue
+                                    
                                 else:
-                                    # Default blue color for non-hazardous objects
-                                    box_color = (0, 0, 255)  # BGR: Blue
+                                    # Default blue color for non-hazardous objects outside geofence
+                                    box_color = (0, 0, 255)  # RGB: Blue
                                 
                                 # Create label with geofence status
                                 label = f"{geofence_status} {cls_name}: {conf:.2f}"
                                 
+                                # r, g, b = box_color
+                                # box_color_rgb = (b, g, r)
+                                # frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
                                 # Draw the box and label
                                 cv2.rectangle(frame_rgb, (x1, y1), (x2, y2), box_color, 2)
+                                # frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
                                 cv2.putText(frame_rgb, label, (x1, y1-10), 
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
                     
@@ -867,6 +892,7 @@ class Ui_MainWindow(object):
             # Convert frame to QPixmap and display it
             height, width, channel = frame_rgb.shape
             bytes_per_line = channel * width
+            # Verify this part around line 850
             q_image = QtGui.QImage(frame_rgb.data, width, height, bytes_per_line, QtGui.QImage.Format_RGB888)
             pixmap = QtGui.QPixmap.fromImage(q_image)
             

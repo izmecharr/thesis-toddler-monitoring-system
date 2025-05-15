@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-# pages package initialization
-
 # Core UI classes and functions
 from .styles import DarkThemeStyle
 from .mainPage import (
@@ -19,8 +16,8 @@ from .mobileHelpPage import show_mobile_help
 #     ToddlerAlarmApp
 # )
 
-# Remove this line - mainApp is not in the pages package
-# from .mainApp import main, show_mobile_help as app_show_mobile_help
+# Import the new reportPage module
+from .reportPage import ReportPanel, ReportLogManager, LogEntry
 
 # Make all classes and functions available at the pages package level
 __all__ = [
@@ -30,5 +27,9 @@ __all__ = [
     'NotificationManager',
     'AboutDialog',
     'HelpDialog',
+    'ReportPanel',
+    'ReportLogManager',
+    'LogEntry',
+    'show_mobile_help',
     # Remove 'main' and 'app_show_mobile_help' from __all__
 ]

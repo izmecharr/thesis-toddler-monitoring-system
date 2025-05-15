@@ -24,6 +24,7 @@ from .aboutPage import AboutDialog
 from .helpPage import HelpDialog
 from .mobileHelpPage import show_mobile_help
 from .styles import DarkThemeStyle
+from .reportPage import ReportPanel
 
 # Import from integration
 from integration import (
@@ -258,8 +259,19 @@ class Ui_MainWindow(object):
         self.statusLabel.setStyleSheet(DarkThemeStyle.STATUS_NORMAL)
         self.content_layout.addWidget(self.statusLabel)
         
-        # Add content frame to main layout
-        self.main_layout.addWidget(self.content_frame)
+        # Create content container
+        self.content_container = QtWidgets.QHBoxLayout()
+        self.content_container.setSpacing(15)
+
+        # Add content frame to content container
+        self.content_container.addWidget(self.content_frame, 1)  # 1 = stretch factor
+
+        # Create and add report panel
+        self.report_panel = ReportPanel(self.centralwidget)
+        self.content_container.addWidget(self.report_panel)
+
+        # Add content container to main layout
+        self.main_layout.addLayout(self.content_container, 1)  # 1 = stretch factor
         
         # Set central widget
         MainWindow.setCentralWidget(self.centralwidget)
@@ -552,8 +564,9 @@ class Ui_MainWindow(object):
             # Reset focal length when settings change
             self.focal_length = None
             
-            self.update_status(f"Config updated: Threshold={self.distance_threshold}m, p={self.minkowski_p}, Hazards list updated", "success")
-    
+            self.update_status(f"Config updated: Threshold={self.distance_threshold:.2f}, p={self.minkowski_p}, Hazards list updated", "success")
+            self.log_general_message(f"Configuration updated: Distance threshold={self.distance_threshold:.2f}, p={self.minkowski_p}", "info")
+
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Toddler Monitoring System"))
@@ -570,8 +583,26 @@ class Ui_MainWindow(object):
                 self.update_status("Error: Could not open camera.", "warning")
                 return
             self.update_status("Camera started", "success")
+            self.log_general_message("Camera started", "success")
+
         self.timer.start(30)  # Update every 30ms (approx 33 fps)
     
+    def log_hazard_near_toddler(self, hazard_name, distance):
+        """Log hazard near toddler alert"""
+        self.report_panel.add_hazard_near_toddler_log(hazard_name, distance)
+
+    def log_hazard_in_geofence(self, hazard_name):
+        """Log hazard in geofence alert"""
+        self.report_panel.add_hazard_in_geofence_log(hazard_name)
+
+    def log_toddler_outside_geofence(self):
+        """Log toddler outside geofence alert"""
+        self.report_panel.add_toddler_outside_geofence_log()
+
+    def log_general_message(self, message, alert_type="info"):
+        """Log general message"""
+        self.report_panel.add_general_log(message, alert_type)
+        
     def calculate_distance(self, pixel_width):
         if self.focal_length is None:
             return None  # Focal length must be estimated first
@@ -672,6 +703,8 @@ class Ui_MainWindow(object):
                                         # Show alert for toddler outside geofence
                                         self.update_status(f"WARNING: Toddler is outside the safe area!", "warning")
                                         self.play_alarm_sound()
+
+                                        self.log_toddler_outside_geofence()
                                     else:
                                         # Green for toddlers inside geofence
                                         adult_box_color = (0, 255, 0)  # BGR: Green
@@ -699,6 +732,8 @@ class Ui_MainWindow(object):
                                     # Show alert for hazard inside safe area
                                     self.update_status(f"WARNING: Hazard is inside the safe area!", "warning")
                                     self.play_alarm_sound()
+
+                                    self.log_hazard_in_geofence(cls_name)
                                     
                                 elif is_hazardous and not is_inside_geofence:
                                     # Blue color for hazardous objects outside geofence
@@ -770,10 +805,12 @@ class Ui_MainWindow(object):
                                     self.is_hazardous(obj_name)):  # Added geofence condition
                                     
                                     # Update status and send notification
-                                    self.update_status(f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f}m)", "warning")
+                                    self.update_status(f"ALERT: {obj_name} too close to toddler! ({estimated_distance:.2f})", "warning")
                                     # Notification would go here if you have a notification system
                                     self.play_alarm_sound()
-                    
+
+                                    self.log_hazard_near_toddler(obj_name, estimated_distance)
+
                     hazardous_objects = []
                     non_hazardous_objects = []
 
@@ -831,7 +868,8 @@ class Ui_MainWindow(object):
         # Use our custom placeholder instead of just text
         self.cameraView.setPixmap(self.camera_placeholder)
         self.update_status("Camera stopped", "normal")
-        
+        self.log_general_message("Camera stopped", "info")
+
     # Add a new method for opening the geofence editor
     def open_geofence_editor(self):
         """Open the geofence editor dialog"""

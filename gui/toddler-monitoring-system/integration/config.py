@@ -49,7 +49,7 @@ HAZARDOUS_OBJECTS = [
     'knife',
     'wine glass',
     'bottle',
-    'fork'
+    'fork',
     'lego',
     'pen',
     'outlet',

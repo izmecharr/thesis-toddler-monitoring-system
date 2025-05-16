@@ -18,13 +18,14 @@ from .mobileHelpPage import show_mobile_help
 
 # Import the new reportPage module
 from .reportPage import ReportPanel, ReportLogManager, LogEntry
-
+from .hazard_presets import show_hazard_preset_dialog
 # Make all classes and functions available at the pages package level
 __all__ = [
     'DarkThemeStyle',
     'Ui_MainWindow',
     'ToddlerMonitoringSystem',
     'NotificationManager',
+    'show_hazard_preset_dialog',
     'AboutDialog',
     'HelpDialog',
     'ReportPanel',

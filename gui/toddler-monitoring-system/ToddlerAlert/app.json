@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "Toddler Alert",
+    "slug": "toddler-alert",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1E1E2E"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourname.toddleralert",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio",
+          "fetch",
+          "remote-notification"
+        ],
+        "NSCameraUsageDescription": "This app uses the camera to scan QR codes for connection",
+        "NSMicrophoneUsageDescription": "This app uses the microphone for audio alerts"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1E1E2E"
+      },
+      "package": "com.yourname.toddleralert",
+      "permissions": [
+        "VIBRATE",
+        "WAKE_LOCK",
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE"
+      ],
+      "useNextNotificationsApi": true
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#FF0000",
+          "sounds": ["D:\\vscode\\Python\\Thesis\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\ToddlerAlert\\assets\\alert.wav"]
+        }
+      ]
+    ]
+  }
+}

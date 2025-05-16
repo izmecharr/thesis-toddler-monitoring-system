@@ -1,5 +1,4 @@
-// App.js - Toddler Alert Mobile App with UI similar to desktop version
-
+// App.js - Toddler Alert Mobile App
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     StyleSheet, 
@@ -22,7 +21,6 @@ import { io } from 'socket.io-client';
 
 // Dark theme styling similar to desktop app
 const DarkThemeStyle = {
-    // Dark theme color palette
     PRIMARY_COLOR: "#2979FF",      // Vibrant blue
     SECONDARY_COLOR: "#5C6BC0",    // Indigo
     WARNING_COLOR: "#FF5252",      // Bright red for warnings
@@ -44,11 +42,10 @@ Notifications.setNotificationHandler({
     }),
 });
 
-// Primary app component
 export default function App() {
     // State variables
     const [connected, setConnected] = useState(false);
-    const [serverAddress, setServerAddress] = useState(null);
+    const [serverAddress, setServerAddress] = useState('http://192.168.254.110:3000');
     const [socket, setSocket] = useState(null);
     const [currentAlert, setCurrentAlert] = useState(null);
     const [sound, setSound] = useState(null);
@@ -60,20 +57,16 @@ export default function App() {
     const socketTimeoutRef = useRef(null);
     const connectionTimeoutMs = 15000; // 15 seconds timeout
 
-    // Set up notification listeners on mount
     useEffect(() => {
-        let mounted = true; // Track component mount state
+        let mounted = true;
         
-        (async () => {
+        async function initialize() {
             try {
                 // Request notification permissions
                 await registerForPushNotificationsAsync();
                 
-                // Use hardcoded server address
-                const defaultServerAddress = 'http://192.168.1.100:3000'; // Change this to your server address
                 if (mounted) {
-                    setServerAddress(defaultServerAddress);
-                    connectToServer(defaultServerAddress);
+                    connectToServer(serverAddress);
                 }
             } catch (error) {
                 console.error('Error during app initialization', error);
@@ -82,7 +75,9 @@ export default function App() {
                     'There was a problem starting the app. Please restart the app.'
                 );
             }
-        })();
+        }
+        
+        initialize();
         
         // Set up notification listeners
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
@@ -90,16 +85,14 @@ export default function App() {
         });
         
         responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-            // If user interacted with notification
             if (currentAlert && mounted) {
                 stopAlarm();
             }
         });
         
-        // Monitor app state changes to handle background/foreground transitions
+        // Monitor app state changes for background/foreground transitions
         const subscription = AppState.addEventListener('change', nextAppState => {
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-                // App has come to the foreground
                 if (socket && !socket.connected && mounted) {
                     reconnectSocket();
                 }
@@ -108,7 +101,6 @@ export default function App() {
         });
         
         return () => {
-            // Clean up resources on unmounting
             mounted = false;
             Notifications.removeNotificationSubscription(notificationListener.current);
             Notifications.removeNotificationSubscription(responseListener.current);
@@ -129,7 +121,7 @@ export default function App() {
         };
     }, []);
     
-    // Play alarm sound with improved error handling
+    // Play alarm sound with error handling
     const playAlarmSound = async () => {
         try {
             // Unload any existing sound first
@@ -142,17 +134,15 @@ export default function App() {
                 }
             }
             
-            // Create a simple beep sound if no sound file is available
+            // Create sound object
             const soundObject = new Audio.Sound();
             
             try {
                 // Try to load the sound file if it exists
-                await soundObject.loadAsync(require('./assets/alarm.mp3'));
+                await soundObject.loadAsync(require('D:\\vscode\\Python\\Thesis\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\ToddlerAlert\\assets\\alert.wav'));
             } catch (error) {
-                console.log('Using fallback sound');
-                // If the sound file doesn't exist, use a fallback approach
-                // This could be handled better with a proper audio library
-                // but for now we'll just vibrate more aggressively
+                console.log('Using fallback sound - vibration');
+                // If the sound file doesn't exist, use vibration
                 if (Platform.OS === 'android') {
                     Vibration.vibrate([500, 500, 500, 500, 500, 500], true);
                 }
@@ -177,7 +167,7 @@ export default function App() {
         }
     };
     
-    // Stop alarm sound with improved error handling
+    // Stop alarm sound
     const stopAlarm = async () => {
         try {
             if (sound) {
@@ -220,7 +210,7 @@ export default function App() {
         }
     };
     
-    // Connect to server using provided address with timeout
+    // Connect to server using provided address
     const connectToServer = (address) => {
         if (!address) {
             Alert.alert(
@@ -287,10 +277,6 @@ export default function App() {
                 handleAlertNotification(alertData);
             });
             
-            newSocket.on('connection_success', (data) => {
-                console.log('Connected successfully');
-            });
-            
             setSocket(newSocket);
         } catch (error) {
             console.error('Socket connection error:', error);
@@ -314,12 +300,12 @@ export default function App() {
         }
     };
     
-    // Get unique device ID (improved implementation)
+    // Get unique device ID
     const getDeviceId = () => {
         return `${Platform.OS}_${Math.random().toString(36).substring(2, 10)}_${Date.now()}`;
     };
     
-    // Schedule push notification with error handling
+    // Schedule push notification
     async function schedulePushNotification(alertData) {
         if (!alertData) {
             console.error('Cannot schedule notification with empty data');
@@ -345,7 +331,7 @@ export default function App() {
         }
     }
     
-    // Register for push notifications with improved error handling
+    // Register for push notifications
     async function registerForPushNotificationsAsync() {
         try {
             if (Platform.OS === 'android') {
@@ -383,44 +369,42 @@ export default function App() {
     }
 
     // About Dialog component
-    const AboutDialog = () => {
-        return (
-            <Modal
-                visible={showAbout}
-                animationType="slide"
-                transparent={true}
-                onRequestClose={() => setShowAbout(false)}
-            >
-                <View style={styles.aboutModal}>
-                    <View style={styles.aboutContainer}>
-                        <View style={styles.aboutHeader}>
-                            <Text style={styles.aboutTitle}>About Toddler Alert</Text>
-                        </View>
-                        
-                        <View style={styles.aboutBody}>
-                            <View style={styles.logoPlaceholder}>
-                                <MaterialIcons name="child-care" size={60} color={DarkThemeStyle.PRIMARY_COLOR} />
-                            </View>
-                            <Text style={styles.aboutVersion}>Version 1.0.0</Text>
-                            <Text style={styles.aboutDescription}>
-                                Toddler Alert is a mobile companion app for the Toddler Monitoring System. 
-                                It receives real-time alerts when your toddler is near hazardous objects or 
-                                leaves a designated safe area.
-                            </Text>
-                            <Text style={styles.aboutCopyright}>© 2025 Toddler Safety Systems Inc.</Text>
-                        </View>
-                        
-                        <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={() => setShowAbout(false)}
-                        >
-                            <Text style={styles.closeButtonText}>Close</Text>
-                        </TouchableOpacity>
+    const AboutDialog = () => (
+        <Modal
+            visible={showAbout}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={() => setShowAbout(false)}
+        >
+            <View style={styles.aboutModal}>
+                <View style={styles.aboutContainer}>
+                    <View style={styles.aboutHeader}>
+                        <Text style={styles.aboutTitle}>About Toddler Alert</Text>
                     </View>
+                    
+                    <View style={styles.aboutBody}>
+                        <View style={styles.logoPlaceholder}>
+                            <MaterialIcons name="child-care" size={60} color={DarkThemeStyle.PRIMARY_COLOR} />
+                        </View>
+                        <Text style={styles.aboutVersion}>Version 1.0.0</Text>
+                        <Text style={styles.aboutDescription}>
+                            Toddler Alert is a mobile companion app for the Toddler Monitoring System. 
+                            It receives real-time alerts when your toddler is near hazardous objects or 
+                            leaves a designated safe area.
+                        </Text>
+                        <Text style={styles.aboutCopyright}>© 2025 Toddler Safety Systems Inc.</Text>
+                    </View>
+                    
+                    <TouchableOpacity
+                        style={styles.closeButton}
+                        onPress={() => setShowAbout(false)}
+                    >
+                        <Text style={styles.closeButtonText}>Close</Text>
+                    </TouchableOpacity>
                 </View>
-            </Modal>
-        );
-    };
+            </View>
+        </Modal>
+    );
     
     // Render active alert modal
     const renderActiveAlert = () => {
@@ -468,79 +452,66 @@ export default function App() {
         );
     };
 
-    // Dropdown menu component
-    const DropdownMenu = () => {
-        return (
-            <Modal
-                visible={showMenu}
-                animationType="fade"
-                transparent={true}
-                onRequestClose={() => setShowMenu(false)}
+    // Menu component
+    const DropdownMenu = () => (
+        <Modal
+            visible={showMenu}
+            animationType="fade"
+            transparent={true}
+            onRequestClose={() => setShowMenu(false)}
+        >
+            <TouchableOpacity 
+                style={styles.menuOverlay}
+                activeOpacity={1}
+                onPress={() => setShowMenu(false)}
             >
-                <TouchableOpacity 
-                    style={styles.menuOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowMenu(false)}
-                >
-                    <View style={styles.menuContainer}>
+                <View style={styles.menuContainer}>
+                    <TouchableOpacity
+                        style={styles.menuItem}
+                        onPress={() => {
+                            setShowMenu(false);
+                            setShowAbout(true);
+                        }}
+                    >
+                        <MaterialIcons name="info" size={24} color={DarkThemeStyle.TEXT_PRIMARY} />
+                        <Text style={styles.menuText}>About</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                        style={styles.menuItem}
+                        onPress={() => {
+                            setShowMenu(false);
+                            reconnectSocket();
+                        }}
+                    >
+                        <MaterialIcons name="refresh" size={24} color={DarkThemeStyle.TEXT_PRIMARY} />
+                        <Text style={styles.menuText}>Reconnect</Text>
+                    </TouchableOpacity>
+                    
+                    {__DEV__ && (
                         <TouchableOpacity
                             style={styles.menuItem}
                             onPress={() => {
                                 setShowMenu(false);
-                                setShowAbout(true);
+                                // Simulate receiving an alert
+                                handleAlertNotification({
+                                    type: Math.random() > 0.5 ? 'geofence' : 'hazard',
+                                    message: Math.random() > 0.5
+                                        ? 'Toddler has left the safe area!' 
+                                        : 'Toddler is near a hazard!',
+                                    location: 'Kitchen',
+                                    severity: 'high'
+                                });
                             }}
                         >
-                            <MaterialIcons name="info" size={24} color={DarkThemeStyle.TEXT_PRIMARY} />
-                            <Text style={styles.menuText}>About</Text>
+                            <MaterialIcons name="bug-report" size={24} color={DarkThemeStyle.TEXT_PRIMARY} />
+                            <Text style={styles.menuText}>Test Alert</Text>
                         </TouchableOpacity>
-                        
-                        <TouchableOpacity
-                            style={styles.menuItem}
-                            onPress={() => {
-                                setShowMenu(false);
-                                if (connected) {
-                                    Alert.alert(
-                                        'Confirm Reconnection',
-                                        'Do you want to reconnect to the server?',
-                                        [
-                                            { text: 'Cancel', style: 'cancel' },
-                                            { text: 'Reconnect', onPress: reconnectSocket }
-                                        ]
-                                    );
-                                } else {
-                                    reconnectSocket();
-                                }
-                            }}
-                        >
-                            <MaterialIcons name="refresh" size={24} color={DarkThemeStyle.TEXT_PRIMARY} />
-                            <Text style={styles.menuText}>Reconnect</Text>
-                        </TouchableOpacity>
-                        
-                        {__DEV__ && (
-                            <TouchableOpacity
-                                style={styles.menuItem}
-                                onPress={() => {
-                                    setShowMenu(false);
-                                    // Simulate receiving an alert
-                                    handleAlertNotification({
-                                        type: Math.random() > 0.5 ? 'geofence' : 'hazard',
-                                        message: Math.random() > 0.5
-                                            ? 'Toddler has left the safe area!' 
-                                            : 'Toddler is near a hazard!',
-                                        location: 'Kitchen',
-                                        severity: 'high'
-                                    });
-                                }}
-                            >
-                                <MaterialIcons name="bug-report" size={24} color={DarkThemeStyle.TEXT_PRIMARY} />
-                                <Text style={styles.menuText}>Test Alert</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </TouchableOpacity>
-            </Modal>
-        );
-    };
+                    )}
+                </View>
+            </TouchableOpacity>
+        </Modal>
+    );
     
     // Main render function
     return (
@@ -600,6 +571,21 @@ export default function App() {
                             onPress={reconnectSocket}
                         >
                             <Text style={styles.reconnectText}>Try Reconnecting</Text>
+                        </TouchableOpacity>
+                    )}
+                    
+                    {/* For development testing only */}
+                    {__DEV__ && (
+                        <TouchableOpacity
+                            style={[styles.reconnectButton, {marginTop: 20, backgroundColor: DarkThemeStyle.WARNING_COLOR}]}
+                            onPress={() => handleAlertNotification({
+                                type: 'hazard',
+                                message: 'Test alert: Toddler near hazard!',
+                                location: 'Living Room',
+                                severity: 'high'
+                            })}
+                        >
+                            <Text style={styles.reconnectText}>Test Alert (DEV)</Text>
                         </TouchableOpacity>
                     )}
                 </View>

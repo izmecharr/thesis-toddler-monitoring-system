@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# Updated appIntegration.py
+# integration/appIntegration.py
 
 def integrate_mobile_app(main_window):
     """
@@ -13,10 +12,26 @@ def integrate_mobile_app(main_window):
         The mobile server manager instance
     """
     # Import here to avoid circular imports
-    from .serverIntegration import integrate_mobile_alerts
-
-    # Integrate the mobile alerts system
-    mobile_server = integrate_mobile_alerts(main_window)
+    from .mobileAlertServer import MobileAlertServer
+    
+    # Create a mobile alert server instance
+    mobile_server = MobileAlertServer(main_window)
+    
+    # Automatically start the server when the app initializes
+    mobile_server.start_server()
+    
+    # Store reference to server in main window
+    main_window.mobile_alert_server = mobile_server
+    
+    # Add method to send alerts
+    def send_mobile_alert(alert_type, message, location="Unknown", severity="high"):
+        """Send an alert to mobile devices"""
+        if hasattr(main_window, 'mobile_alert_server'):
+            return main_window.mobile_alert_server.send_alert(alert_type, message, location, severity)
+        return False
+    
+    # Add the method to the main window instance
+    main_window.send_mobile_alert = send_mobile_alert
     
     # Hook up alerts from the detector to the mobile app
     if hasattr(main_window, 'ui'):
@@ -52,8 +67,10 @@ def integrate_mobile_app(main_window):
                             hazard_type = parts[0] if len(parts) > 0 else "Unknown"
                             
                             # Send to mobile app
-                            ui.send_mobile_alert("Hazard Proximity", 
-                                              f"Warning: Toddler is too close to {hazard_type}!")
+                            ui.send_mobile_alert("hazard", 
+                                              f"Warning: Toddler is too close to {hazard_type}!", 
+                                              "Unknown",
+                                              "high")
                         
         # Replace the update_frame method with our patched version
         ui.update_frame = patched_update_frame
@@ -68,8 +85,10 @@ def integrate_mobile_app(main_window):
             details: Details about the violation
         """
         if is_violation and hasattr(main_window, 'send_mobile_alert'):
-            main_window.send_mobile_alert("Geofence Breach", 
-                                        f"Warning: Toddler has left the designated safe area! {details}")
+            main_window.send_mobile_alert("geofence", 
+                                        f"Warning: Toddler has left the designated safe area! {details}",
+                                        "Geofence Boundary",
+                                        "high")
     
     # If geofence integration exists, connect the violation monitor
     if hasattr(main_window, 'geofence_integration'):
@@ -78,71 +97,80 @@ def integrate_mobile_app(main_window):
             main_window.geofence_integration.violation_detected.connect(monitor_geofence_violations)
         
         # Monitor for combined alerts (toddler + hazard in geofence)
-        original_check_combined_status = main_window.geofence_integration.check_combined_status
-        
-        def patched_check_combined_status():
-            """Patched version that also sends mobile alerts for combined status"""
-            original_check_combined_status()
+        if hasattr(main_window.geofence_integration, 'check_combined_status'):
+            original_check_combined_status = main_window.geofence_integration.check_combined_status
             
-            # Check if there's a combined alert state
-            geofence_manager = main_window.geofence_integration
-            if getattr(geofence_manager, 'combined_alert_active', False):
-                # Get the combined alert message
-                alert_message = ui.statusLabel.text()
-                if "CRITICAL ALERT" in alert_message:
-                    main_window.send_mobile_alert("Critical Alert", alert_message)
-        
-        # Replace the check_combined_status method with our patched version
-        main_window.geofence_integration.check_combined_status = patched_check_combined_status
-        
-        # Monitor toddler geofence status changes specifically
-        original_check_toddler_in_geofence = main_window.geofence_integration.check_toddler_in_geofence
-        
-        def patched_check_toddler_in_geofence(toddlers):
-            """Patched version that sends mobile alerts for geofence transitions"""
-            # Store the previous state
-            if not hasattr(main_window.geofence_integration, '_previous_toddler_states'):
-                main_window.geofence_integration._previous_toddler_states = {}
+            def patched_check_combined_status():
+                """Patched version that also sends mobile alerts for combined status"""
+                original_check_combined_status()
                 
-            # Call the original function
-            original_check_toddler_in_geofence(toddlers)
+                # Check if there's a combined alert state
+                geofence_manager = main_window.geofence_integration
+                if getattr(geofence_manager, 'combined_alert_active', False):
+                    # Get the combined alert message
+                    if hasattr(ui, 'statusLabel'):
+                        alert_message = ui.statusLabel.text()
+                        if "CRITICAL ALERT" in alert_message:
+                            main_window.send_mobile_alert("critical", alert_message,
+                                                        "Combined Hazard",
+                                                        "critical")
             
-            # Check for geofence transitions
-            geofence_manager = main_window.geofence_integration
-            current_toddlers = {}
+            # Replace the check_combined_status method with our patched version
+            main_window.geofence_integration.check_combined_status = patched_check_combined_status
             
-            for i, (tx1, ty1, tx2, ty2, _) in enumerate(toddlers):
-                center_x = (tx1 + tx2) // 2
-                center_y = (ty1 + ty2) // 2
-                
-                grid_x = center_x // 20
-                grid_y = center_y // 20
-                toddler_id = f"toddler_{grid_x}_{grid_y}"
-                
-                is_inside = geofence_manager.point_in_polygon(center_x, center_y, geofence_manager.saved_geofence)
-                current_toddlers[toddler_id] = is_inside
-                
-                # Check for state changes
-                if toddler_id in geofence_manager._previous_toddler_states:
-                    was_inside = geofence_manager._previous_toddler_states[toddler_id]
+            # Monitor toddler geofence status changes specifically
+            original_check_toddler_in_geofence = main_window.geofence_integration.check_toddler_in_geofence
+            
+            def patched_check_toddler_in_geofence(toddlers):
+                """Patched version that sends mobile alerts for geofence transitions"""
+                # Store the previous state
+                if not hasattr(main_window.geofence_integration, '_previous_toddler_states'):
+                    main_window.geofence_integration._previous_toddler_states = {}
                     
-                    if was_inside and not is_inside:
-                        # Toddler left the safe area
-                        main_window.send_mobile_alert(
-                            "Geofence Alert",
-                            "Warning: Toddler has left the safe area!"
-                        )
-                    elif not was_inside and is_inside:
-                        # Toddler entered the safe area
-                        main_window.send_mobile_alert(
-                            "Geofence Alert",
-                            "Toddler has entered the safe area."
-                        )
+                # Call the original function
+                original_check_toddler_in_geofence(toddlers)
+                
+                # Check for geofence transitions
+                geofence_manager = main_window.geofence_integration
+                current_toddlers = {}
+                
+                for i, (tx1, ty1, tx2, ty2, _) in enumerate(toddlers):
+                    center_x = (tx1 + tx2) // 2
+                    center_y = (ty1 + ty2) // 2
+                    
+                    grid_x = center_x // 20
+                    grid_y = center_y // 20
+                    toddler_id = f"toddler_{grid_x}_{grid_y}"
+                    
+                    is_inside = geofence_manager.point_in_polygon(center_x, center_y, geofence_manager.saved_geofence)
+                    current_toddlers[toddler_id] = is_inside
+                    
+                    # Check for state changes
+                    if toddler_id in geofence_manager._previous_toddler_states:
+                        was_inside = geofence_manager._previous_toddler_states[toddler_id]
+                        
+                        if was_inside and not is_inside:
+                            # Toddler left the safe area
+                            main_window.send_mobile_alert(
+                                "geofence",
+                                "Warning: Toddler has left the safe area!",
+                                "Geofence Boundary",
+                                "high"
+                            )
+                        elif not was_inside and is_inside:
+                            # Toddler entered the safe area
+                            main_window.send_mobile_alert(
+                                "geofence",
+                                "Toddler has entered the safe area.",
+                                "Geofence Boundary", 
+                                "medium"
+                            )
+                
+                # Update previous states
+                geofence_manager._previous_toddler_states = current_toddlers.copy()
             
-            # Update previous states
-            geofence_manager._previous_toddler_states = current_toddlers.copy()
-        
-        # Replace the check_toddler_in_geofence method with our patched version
-        main_window.geofence_integration.check_toddler_in_geofence = patched_check_toddler_in_geofence
+            # Replace the check_toddler_in_geofence method with our patched version
+            if hasattr(main_window.geofence_integration, 'check_toddler_in_geofence'):
+                main_window.geofence_integration.check_toddler_in_geofence = patched_check_toddler_in_geofence
     
     return mobile_server

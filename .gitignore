@@ -6,3 +6,5 @@ enhanced_yolov8/
 enhanced_yolov8_continued/
 gui/toddler-monitoring-system/resources/
 *.py[cod]
+gui/toddler-monitoring-system/dist/ToddlerMonitoringSystem.exe
+gui/toddler-monitoring-system/toddler_monitoring.spec

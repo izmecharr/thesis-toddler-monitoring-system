@@ -353,8 +353,7 @@ class Ui_MainWindow(object):
         try:
             self.update_status("Loading YOLO model...", "normal")
             # Update this path to your model path
-            self.model = YOLO('D:\\vscode\\Python\\Thesis\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\assets\\yolo11n.pt')
-            # self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
+            self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\New folder (2)\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt')
             #self.model = YOLO('C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\enhanced_yolov8\\enhanced_n_3\\weights\\best.pt')
             # model_path = os.path.join(os.path.dirname(os.path.dirname(sys.executable)), 'resources', 'yolo11n.pt')
             # # model_path = os.path.join(os.path.dirname(os.path.dirname(sys.executable)), 'resources', 'yolov8_customDataset.pt')

@@ -6,4 +6,3 @@ enhanced_yolov8/
 enhanced_yolov8_continued/
 gui/toddler-monitoring-system/resources/
 *.py[cod]
-node_modules

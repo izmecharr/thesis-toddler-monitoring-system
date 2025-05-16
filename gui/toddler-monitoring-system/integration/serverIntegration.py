@@ -237,16 +237,6 @@ class MobileServerManager(QObject):
             print(f'Mobile device registered: {data}')
             # Send confirmation
             self.sio.emit('connection_success', room=sid)
-        
-        @self.sio.on('message')
-        def on_message(sid, data):
-            """Handle WebSocket messages from clients that aren't using Socket.IO"""
-            print(f'WebSocket message from {sid}: {data}')
-            # Process the message based on its type
-            if isinstance(data, dict) and 'type' in data:
-                if data['type'] == 'register_mobile':
-                    # Send confirmation
-                    self.sio.emit('connection_success', room=sid)
     
     def start_server(self):
         """Start the socket.io server and web server in background threads"""
@@ -326,8 +316,7 @@ class MobileServerManager(QObject):
         connection_info = {
             "host": self.server_ip,
             "port": self.server_port,
-            "app_id": self.app_id,
-            "protocol": "websocket"  # Add this to specify WebSocket protocol
+            "app_id": self.app_id
         }
         
         # Add web server URL if enabled
@@ -336,7 +325,7 @@ class MobileServerManager(QObject):
         
         # Convert to JSON string
         json_data = json.dumps(connection_info)
-            
+        
         # Generate QR code
         qr = qrcode.QRCode(
             version=1,

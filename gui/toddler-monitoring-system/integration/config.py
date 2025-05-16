@@ -28,18 +28,6 @@ Contains shared settings and defaults that can be imported by other modules
 #     'fork'
 # ]
 
-# HAZARDOUS_OBJECTS = [
-#     'hair dryer',
-#     'vase',
-#     'oven',
-#     'microwave',
-#     'remote',
-#     'knife',
-#     'wine glass',
-#     'bottle',
-#     'fork'
-# ]
-
 HAZARDOUS_OBJECTS = [
     'hair dryer',
     'vase',
@@ -49,22 +37,7 @@ HAZARDOUS_OBJECTS = [
     'knife',
     'wine glass',
     'bottle',
-    'fork',
-    'lego',
-    'pen',
-    'outlet',
-    'screwdriver',
-    'hammer',
-    'wrench',
-    'pliers',
-    'coin',
-    'lighter',
-    'fan',
-    'battery',
-    'cord',
-    'razor',
-    'glass',
-    'drink',
+    'fork'
 ]
 
 # Distance threshold for proximity alerts (meters)

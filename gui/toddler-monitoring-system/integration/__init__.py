@@ -7,14 +7,13 @@ from .config import *
 # Core integrations
 from .geofenceIntegration import GeofenceManager, integrate_geofence
 from .appIntegration import integrate_mobile_app  # Add this line
-from .hazardPresetIntegration import integrate_hazard_presets
+
 # Make all classes and functions available at the integration package level
 __all__ = [
     'GeofenceManager',
     'GeofencePoint',
     'integrate_geofence',
     'integrate_mobile_app',  # Add this line
-    'integrate_hazard_presets',
     'HAZARDOUS_OBJECTS',
     'DEFAULT_DISTANCE_THRESHOLD',
     'DEFAULT_MINKOWSKI_P',

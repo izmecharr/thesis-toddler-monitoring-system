@@ -45,7 +45,7 @@ This application was developed as a thesis project at the Technological Institut
 
 ## 🛠️ Technologies Used
 
-- **YOLO11** - Object Detection Model
+- **YOLO** - Object Detection Model
 - **OpenCV** - Computer Vision Library
 - **PyQt5** - User Interface Framework
 - **Python** - Programming Language
@@ -90,12 +90,12 @@ pip install -r requirements.txt
 
 4. **Download YOLOv8 model files**
 Place the YOLOv8 model files in the `resources` directory:
-   - `yolo11n.pt` - Primary detection model
-   - `best.pt` - Toddler-specific detection model
+   - `yolov1.pt` - Primary detection model
+   - `yolov2.pt` - Toddler-specific detection model
 
 5. **Run the application**
 ```bash
-python main.py
+python mainApp.py
 ```
 
 ## 🔧 Usage Guide
@@ -173,11 +173,11 @@ Potential improvements for future versions:
 
 ## 📝 License
 
-© 2025 Technological Institute of the Philippines. All rights reserved.
+© 2025 All rights reserved.
 
 ## 🙏 Acknowledgments
 
-- Special thanks to our advisor, **Dr. Rosmina Joy Cabauatan**, at the Technological Institute of the Philippines
+- Special thanks to our advisor, **Dr. Rosmina Joy Cabauatan**, and the panelists at the Technological Institute of the Philippines (TIP-QC)
 - Thanks to the developers of the YOLO object detection framework
 - Thanks to all testers who provided valuable feedback during development
 
@@ -191,11 +191,11 @@ For questions or collaboration opportunities:
 
 **Borje, Mika Emmanuel**
 - Email: [charr.lizzeel@gmail.com](mailto:charr.lizzee@gmail.com)
-- GitHub: [izmecharr](https://github.com/izmecharr)
+- GitHub: [Kuromibo](https://github.com/Kuromibo)
 
 **Trinidad, Lorenzo Earl**
 - Email: [charr.lizzeel@gmail.com](mailto:charr.lizzee@gmail.com)
-- GitHub: [izmecharr](https://github.com/izmecharr)
+- GitHub: [Lowrenzoo](https://github.com/Lowrenzoo)
   
 ---------------------------------------------------------------------------
 

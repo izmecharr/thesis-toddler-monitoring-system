@@ -1,6 +1,7 @@
 # Toddler Monitoring System
 
-A safety-focused application that uses YOLOv8 object detection with increased confidence scores to detect and monitor toddlers, ensuring their safety by alerting caregivers of potential hazards.
+## Final Thesis Project of BSc Computer Science Students from Technological Institute of the Philippines (TIP)
+A computer vision-based child safety system implementing YOLOv8 neural network architecture with custom-trained weights and increased confidence thresholds (0.50+) to detect and classify toddlers versus adults in real-time video streams. The system employs Minkowski distance algorithms for proximity calculation between detected entities and implements real-time geofencing with polygon-based safe zone demarcation to ensure child safety through multi-modal alert mechanisms.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 

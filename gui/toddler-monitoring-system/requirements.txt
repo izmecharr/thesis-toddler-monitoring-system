@@ -1,0 +1,10 @@
+PyQt5>=5.15.0
+opencv-python>=4.5.0
+numpy>=1.19.0
+torch>=1.9.0
+ultralytics>=8.0.0
+PyInstaller>=5.0.0
+qrcode>=7.3.1
+socketio>=5.7.0
+python-socketio>=5.7.0
+Pillow>=9.0.0

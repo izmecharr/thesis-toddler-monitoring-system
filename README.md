@@ -188,11 +188,11 @@ For questions or collaboration opportunities:
 - GitHub: [izmecharr](https://github.com/izmecharr)
 
 **Borje, Mika Emmanuel**
-- Email: [charr.lizzeel@gmail.com](mailto:charr.lizzee@gmail.com)
+- Email: [charr.lizzeel@gmail.com](mailto:mikaborje01@gmail.com)
 - GitHub: [Kuromibo](https://github.com/Kuromibo)
 
 **Trinidad, Lorenzo Earl**
-- Email: [charr.lizzeel@gmail.com](mailto:charr.lizzee@gmail.com)
+- Email: [charr.lizzeel@gmail.com](mailto:lorenzotrinidad0912@gmail.com)
 - GitHub: [Lowrenzoo](https://github.com/Lowrenzoo)
   
 ---------------------------------------------------------------------------

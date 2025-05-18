@@ -30,7 +30,7 @@ from .hazard_presets import show_hazard_preset_dialog
 # Import from integration
 from integration import (
     integrate_geofence,
-    integrate_mobile_app,
+    integrate_mobile_alerts,
     integrate_hazard_presets,
     HAZARDOUS_OBJECTS
 )
@@ -1085,7 +1085,7 @@ class ToddlerMonitoringSystem(QtWidgets.QMainWindow):
         self.ui.actionAbout.triggered.connect(self.show_about_dialog)
         
         # Initialize mobile app integration
-        integrate_mobile_app(self)
+        integrate_mobile_alerts(self)
         
         # Initialize hazard presets - ADD THIS LINE
         integrate_hazard_presets(self)

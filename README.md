@@ -1,4 +1,4 @@
-# Toddler Monitoring System
+# Toddler Monitoring System with Mobile Alert using PyQt5 and React Native
 
 ## Final Thesis Project of BSc Computer Science Students from Technological Institute of the Philippines (TIP)
 A computer vision-based child safety system implementing YOLOv8 neural network architecture with custom-trained weights and increased confidence thresholds (0.50+) to detect and classify toddlers versus adults in real-time video streams. The system employs Minkowski distance algorithms for proximity calculation between detected entities and implements real-time geofencing with polygon-based safe zone demarcation to ensure child safety through multi-modal alert mechanisms.

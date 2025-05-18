@@ -10,7 +10,11 @@ A computer vision-based child safety system implementing YOLOv8 neural network a
 [Click here to watch the demo video](https://youtu.be/your-demo-video-id)  
 *(Note: Replace 'your-demo-video-id' with your actual YouTube video ID)*
 
-![Screenshot of Application](https://raw.githubusercontent.com/izmecharr/thesis-toddler-monitoring-system/1.png)  
+<p align="center">
+  <img src="screenshots/1.png" alt="Toddler Monitoring System" width="700"/>
+  <br>
+  <em>Toddler Monitoring System with active toddler and object detection</em>
+</p>
 *(Note: Add screenshots to your repository in a 'screenshots' folder)*
 
 ## 🌟 Features

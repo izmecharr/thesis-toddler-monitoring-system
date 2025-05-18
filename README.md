@@ -1,6 +1,6 @@
 # Toddler Monitoring System with Mobile Alert using PyQt5 and React Native
 
-## Final Thesis Project of BSc Computer Science Students from Technological Institute of the Philippines (TIP)
+## Final Thesis Project of BS Computer Science Students from Technological Institute of the Philippines Queazon City (TIP QC)
 A computer vision-based child safety system implementing YOLOv8 neural network architecture with custom-trained weights and increased confidence score (0.05) to detect and classify toddlers versus adults in real-time video streams. The system employs Minkowski distance algorithms for proximity calculation between detected entities and implements real-time geofencing with polygon-based safe zone demarcation to ensure child safety through multi-modal alert mechanisms.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -10,7 +10,7 @@ A computer vision-based child safety system implementing YOLOv8 neural network a
 <p align="center">
   <img src="screenshots/6.png" alt="Toddler Monitoring System" width="700"/>
   <br>
-  <em>[Click here to watch the full demo video](https://youtu.be/FkaPsGel7-o)</em>
+  <em>Click here to watch the full demo video - https://youtu.be/FkaPsGel7-o</em>
 </p>
 
 ## 📷 Screenshots
@@ -40,7 +40,7 @@ A computer vision-based child safety system implementing YOLOv8 neural network a
 This application was developed as a thesis project at the Technological Institute of the Philippines by:
 
 - **Amorato, Charlize C.** - Led core system architecture development and implementation, engineered the PyQt5 UI framework, and spearheaded the curation of specialized training datasets for toddler and hazard recognition
-- **Borje, Mika Emmanuel** -  Orchestrated neural network model training and optimization, implemented confidence threshold enhancements, and developed the dual-model detection pipeline for improved accuracy
+- **Borje, Mika Emmanuel** -  Orchestrated neural network model training and optimization, implemented confidence threshold enhancements, and developed the model detection pipeline for improved accuracy
 - **Trinidad, Lorenzo Earl** - Architected the Minkowski distance algorithms for proximity detection, constructed comprehensive documentation, and contributed to dataset annotation and validation
 
 ## 🛠️ Technologies Used

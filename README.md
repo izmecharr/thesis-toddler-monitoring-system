@@ -167,20 +167,28 @@ Potential improvements for future versions:
 
 © 2025 Technological Institute of the Philippines. All rights reserved.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 🙏 Acknowledgments
 
-- Special thanks to our advisors at the Technological Institute of the Philippines
+- Special thanks to our advisor, **Dr. Rosmina Joy Cabauatan**, at the Technological Institute of the Philippines
 - Thanks to the developers of the YOLO object detection framework
 - Thanks to all testers who provided valuable feedback during development
 
 ## 📞 Contact
 
 For questions or collaboration opportunities:
-- Email: [your-email@example.com](mailto:your-email@example.com)
+
+**Amorato, Charlize C.**
+- Email: [charr.lizzeel@gmail.com](mailto:charr.lizzee@gmail.com)
 - GitHub: [izmecharr](https://github.com/izmecharr)
 
----
+**Borje, Mika Emmanuel**
+- Email: [charr.lizzeel@gmail.com](mailto:charr.lizzee@gmail.com)
+- GitHub: [izmecharr](https://github.com/izmecharr)
+
+**Trinidad, Lorenzo Earl**
+- Email: [charr.lizzeel@gmail.com](mailto:charr.lizzee@gmail.com)
+- GitHub: [izmecharr](https://github.com/izmecharr)
+  
+---------------------------------------------------------------------------
 
 Made with ❤️ to enhance child safety through technology

@@ -358,8 +358,8 @@ class Ui_MainWindow(object):
             # self.model = YOLO(model_path)
             
             # Load first model
-            model1_path = 'C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\resources\\yolo11n.pt'
-            model2_path = 'C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\resources\\best.pt'
+            model1_path = 'C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\resources\\yolo-general.pt'
+            model2_path = 'C:\\Users\\izzze\\OneDrive\\Documents\\GitHub\\thesis-toddler-monitoring-system\\gui\\toddler-monitoring-system\\resources\\yolo-people.pt'
             
             # Load first model
             self.model1 = YOLO(model1_path)

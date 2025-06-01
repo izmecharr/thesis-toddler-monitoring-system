@@ -1,4 +1,4 @@
-# Toddler Monitoring System with Mobile Alert using PyQt5 and React Native
+# Toddler Monitoring System using PyQt5
 
 ## Final Thesis Project of BS Computer Science Students from Technological Institute of the Philippines Queazon City (TIP QC)
 A computer vision-based child safety system implementing YOLOv8 neural network architecture with custom-trained weights and increased confidence score (0.05) to detect and classify toddlers versus adults in real-time video streams. The system employs Minkowski distance algorithms for proximity calculation between detected entities and implements real-time geofencing with polygon-based safe zone demarcation to ensure child safety through multi-modal alert mechanisms.
@@ -29,7 +29,7 @@ A computer vision-based child safety system implementing YOLOv8 neural network a
 - **Customizable alert thresholds** and distance metrics
 - **Visual and audio alerts** for different safety scenarios
 - **Hazardous object configuration** with customizable presets
-- **Mobile app integration** for remote monitoring and alerts
+<!-- - **Mobile app integration** for remote monitoring and alerts -->
 - **Activity logging** with exportable reports to Excel/CSV
 - **Dark-themed UI** for comfortable extended monitoring
 
@@ -47,7 +47,7 @@ This application was developed as a thesis project at the Technological Institut
 - **OpenCV** - Computer Vision Library
 - **PyQt5** - User Interface Framework
 - **Python** - Programming Language
-- **Socket.io** - Mobile App Communication
+<!-- - **Socket.io** - Mobile App Communication -->
 
 ## 📋 System Requirements
 
@@ -88,8 +88,8 @@ pip install -r requirements.txt
 
 4. **Download YOLOv8 model files**
 Place the YOLOv8 model files in the `resources` directory:
-   - `yolov1.pt` - Primary detection model
-   - `yolov2.pt` - Toddler-specific detection model
+   - `yolo-general.pt` - Primary detection model
+   - `yolo-people.pt` - Toddler-specific detection model
 
 5. **Run the application**
 ```bash
@@ -116,11 +116,11 @@ python mainApp.py
 3. Add or remove objects from the list
 4. Alternatively, select a preset from the "Hazard Preset" dropdown
 
-### Mobile App Connection
+<!-- ### Mobile App Connection
 1. Select "Mobile > Connect Mobile App" from the menu
 2. Scan the displayed QR code with the mobile app
 3. Confirm connection is established
-4. Mobile alerts will be sent automatically
+4. Mobile alerts will be sent automatically -->
 
 ### Viewing Activity Logs
 1. All alerts and events are logged in the right panel
@@ -158,10 +158,11 @@ Potential improvements for future versions:
    - Auto-learning of household's safe and danger zones
 
 3. **Mobile Enhancements**
+   - Connects to Mobile via QR code
    - Live video stream to mobile app
    - Two-way audio communication
    - Push notifications integration
-   - iOS app support (currently Android only)
+   - Alert vibration when there is warning 
 
 4. **User Experience**
    - Simplified setup wizard

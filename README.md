@@ -1,7 +1,7 @@
 # Toddler Monitoring System using PyQt5 and YOLOv8
 
 ## Final Thesis Project of BS Computer Science Students from Technological Institute of the Philippines Queazon City (TIP QC)
-A computer vision-based child safety system implementing YOLOv11 neural network architecture with custom-trained weights to detect and classify toddlers versus adults in real-time video streams. The system employs Minkowski distance algorithms for proximity calculation between detected entities and implements real-time geofencing with polygon-based safe zone demarcation to ensure child safety through multi-modal alert mechanisms.
+A computer vision-based child safety system implementing YOLOv8 neural network architecture with custom-trained weights to detect and classify toddlers versus adults, and objects in real-time. The system employs Minkowski distance algorithms for proximity calculation between detected entities and implements real-time geofencing with polygon-based safe zone demarcation to ensure child safety through alert.
 
 ## 📹 Demo Video
 

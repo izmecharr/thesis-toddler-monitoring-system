@@ -37,9 +37,9 @@ A computer vision-based child safety system implementing YOLOv11 neural network 
 
 This application was developed as a thesis project at the Technological Institute of the Philippines by:
 
-- **Amorato, Charlize C.** - Led core system architecture development and implementation, engineered the PyQt5 UI framework, and spearheaded the curation of specialized training datasets for toddler and hazard recognition
-- **Borje, Mika Emmanuel** -  Orchestrated neural network model training and optimization, implemented confidence threshold enhancements, and developed the model detection pipeline for improved accuracy
-- **Trinidad, Lorenzo Earl** - Architected the Minkowski distance algorithms for proximity detection, constructed comprehensive documentation, and contributed to dataset annotation and validation
+- **Amorato, Charlize C.** - Developed system architecture, built PyQt5 UI framework, curated toddler and object recognition datasets, annotated datasets, Trained model
+- **Borje, Mika Emmanuel** -   Trained and optimized neural network models, implemented confidence thresholds, developed detection pipeline
+- **Trinidad, Lorenzo Earl** - Implemented Minkowski distance algorithms for proximity detection, created documentation, annotated datasets
 
 ## 🛠️ Technologies Used
 
